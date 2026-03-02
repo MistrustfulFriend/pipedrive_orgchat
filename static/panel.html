@@ -5,6 +5,10 @@
   <title>Org Chart Builder</title>
   <meta name="viewport" content="width=device-width, initial-scale=1" />
   <script src="https://cdn.jsdelivr.net/npm/@pipedrive/app-extensions-sdk@0/dist/index.umd.js"></script>
+  <script>
+    // Make Command available globally from the UMD build
+    const Command = window.AppExtensionsSDK?.Command || { RESIZE: "resize" };
+  </script>
   <link rel="preconnect" href="https://fonts.googleapis.com" />
   <link href="https://fonts.googleapis.com/css2?family=DM+Sans:ital,opsz,wght@0,9..40,400;0,9..40,500;0,9..40,600;1,9..40,400&family=DM+Mono:wght@400;500&display=swap" rel="stylesheet" />
   <style>
@@ -389,6 +393,8 @@
     .port:hover { transform: scale(1.4); background: var(--blue); }
     .port.port-bottom { bottom: -6px; left: calc(50% - 5px); }
     .port.port-top    { top: -6px;    left: calc(50% - 5px); }
+    .port.port-left   { left: -6px;   top:  calc(50% - 5px); }
+    .port.port-right  { right: -6px;  top:  calc(50% - 5px); }
 
     /* ─── Edges ────────────────────────────────────────────── */
     .edge-path {
@@ -774,8 +780,9 @@
     <div class="sb-section">Tips</div>
     <div style="padding:6px 10px 10px; font-size:11px; color:var(--text3); line-height:1.6;">
       • Drag nodes to reposition<br>
-      • Hover node → drag port to connect<br>
-      • Click edge to delete it<br>
+      • Hover node → drag any port to connect<br>
+      • Connections route left/right or top/bottom automatically<br>
+      • Click a connection line to delete it<br>
       • Save stores chart on org note
     </div>
   </div>
@@ -903,6 +910,11 @@ try {
   // The SDK reads it automatically — do NOT hardcode the identifier.
   sdk = await new AppExtensionsSDK().initialize();
 
+  // Resize the modal to fill most of the screen
+  try {
+    await sdk.execute(Command.RESIZE, { width: 1100, height: 700 });
+  } catch(e) { /* resize not supported in all contexts */ }
+
   const ctx = sdk.userContext    || {};
   const u   = sdk.userIdentifier || {};
 
@@ -1011,8 +1023,10 @@ function makeNodeEl(n) {
         <svg viewBox="0 0 24 24"><polyline points="3 6 5 6 21 6"/><path d="M19 6l-1 14H6L5 6"/><path d="M10 11v6"/><path d="M14 11v6"/></svg>
       </button>
     </div>
-    <div class="port port-bottom" data-id="${n.id}"></div>
-    <div class="port port-top"    data-id="${n.id}"></div>
+    <div class="port port-bottom" data-id="${n.id}" data-side="bottom"></div>
+    <div class="port port-top"    data-id="${n.id}" data-side="top"></div>
+    <div class="port port-left"   data-id="${n.id}" data-side="left"></div>
+    <div class="port port-right"  data-id="${n.id}" data-side="right"></div>
   `;
 
   dragNode(el, n);
@@ -1086,11 +1100,44 @@ function edgeMidpoint(f, t) {
 
 function edgePath(f, t) {
   const fw = nodeW(f), fh = nodeH(f);
-  const tw = nodeW(t);
-  const x1 = f.x + fw/2, y1 = f.y + fh;
-  const x2 = t.x + tw/2, y2 = t.y;
-  const cp = Math.abs(y2-y1) * 0.5;
-  return `M${x1},${y1} C${x1},${y1+cp} ${x2},${y2-cp} ${x2},${y2}`;
+  const tw = nodeW(t), th = nodeH(t);
+
+  // Centre points
+  const fcx = f.x + fw/2, fcy = f.y + fh/2;
+  const tcx = t.x + tw/2, tcy = t.y + th/2;
+
+  const dx = tcx - fcx;
+  const dy = tcy - fcy;
+
+  let x1, y1, x2, y2, cpx1, cpy1, cpx2, cpy2;
+
+  if (Math.abs(dx) > Math.abs(dy)) {
+    // Nodes are more side-by-side → use left/right ports
+    if (dx > 0) {
+      x1 = f.x + fw; y1 = fcy;   // right of from
+      x2 = t.x;      y2 = tcy;   // left of to
+    } else {
+      x1 = f.x;      y1 = fcy;   // left of from
+      x2 = t.x + tw; y2 = tcy;   // right of to
+    }
+    const gap = Math.abs(x2 - x1) * 0.5;
+    cpx1 = x1 + (dx > 0 ? gap : -gap); cpy1 = y1;
+    cpx2 = x2 - (dx > 0 ? gap : -gap); cpy2 = y2;
+  } else {
+    // Nodes are more above/below → use top/bottom ports
+    if (dy > 0) {
+      x1 = fcx; y1 = f.y + fh;  // bottom of from
+      x2 = tcx; y2 = t.y;        // top of to
+    } else {
+      x1 = fcx; y1 = f.y;        // top of from
+      x2 = tcx; y2 = t.y + th;   // bottom of to
+    }
+    const gap = Math.abs(y2 - y1) * 0.5;
+    cpx1 = x1; cpy1 = y1 + (dy > 0 ? gap : -gap);
+    cpx2 = x2; cpy2 = y2 - (dy > 0 ? gap : -gap);
+  }
+
+  return `M${x1},${y1} C${cpx1},${cpy1} ${cpx2},${cpy2} ${x2},${y2}`;
 }
 
 function nodeW(n) { return document.getElementById("nd-"+n.id)?.offsetWidth || 190; }
@@ -1151,14 +1198,22 @@ function setupPorts(el, nodeId) {
   });
 }
 
+function portPos(nodeId, side) {
+  const n = nodes[nodeId];
+  const w = nodeW(n), h = nodeH(n);
+  if (side === "top")    return [n.x + w/2, n.y];
+  if (side === "left")   return [n.x,       n.y + h/2];
+  if (side === "right")  return [n.x + w,   n.y + h/2];
+  return [n.x + w/2, n.y + h]; // bottom (default)
+}
+
 function startEdgeDrag(fromId, e) {
   connSrc = fromId;
   banner.style.display = "block";
   const rect = canvasEl.getBoundingClientRect();
-  const fn = nodes[fromId];
-  const x1 = fn.x + nodeW(fn)/2;
-  const y1 = fn.y + nodeH(fn);
-  dragLine.setAttribute("x1", x1); dragLine.setAttribute("y1", y1);
+  const side = e.target.dataset.side || "bottom";
+  const [px, py] = portPos(fromId, side);
+  dragLine.setAttribute("x1", px); dragLine.setAttribute("y1", py);
   dragLine.setAttribute("x2", e.clientX-rect.left); dragLine.setAttribute("y2", e.clientY-rect.top);
   dragLine.style.display = "block";
 
