@@ -892,43 +892,30 @@
   // Always read URL params first as reliable fallback
   const _p = new URLSearchParams(location.search);
 
-  // IMPORTANT:
-  // - In Pipedrive Custom UI (modal/panel), `id` in the iframe URL is a *runtime identifier* for the SDK.
-  // - Your organisation id should come from SDK's userIdentifier.id, OR from an explicit `orgId` URL param in standalone testing.
+  // Pipedrive iframe runtime id for SDK init:
+  const runtimeId = _p.get("id") || "";
 
-  const runtimeId = _p.get("id") || ""; // runtime identifier for AppExtensionsSDK when embedded in Pipedrive
-
+  // Standalone fallback org id (when testing in browser):
   let companyId = _p.get("companyId") || "";
-  let orgId     = _p.get("orgId")     || _p.get("org_id") || ""; // standalone fallback
-  let orgName   = _p.get("name")      || "";
+  let orgId     = _p.get("orgId") || _p.get("org_id") || "";
+  let orgName   = _p.get("name")  || "";
   let sdk       = null;
 
-  // Only attempt SDK init if we look like we're inside Pipedrive
-  // (i.e. loaded in an iframe with a parent origin)
   try {
     const isIframe = window.self !== window.top;
-
     if (isIframe) {
-      // Timeout wrapper — SDK can hang indefinitely if not in Pipedrive
-      // Use up to ~9s; Pipedrive may reject if the iframe takes too long to init.
-      if (!runtimeId) {
-        throw new Error("Missing runtime id in iframe URL (expected ?id=...)");
-      }
-
+      if (!runtimeId) throw new Error("Missing runtime id (?id=...)");
       sdk = await Promise.race([
         AppExtensionsSDK.initialize({ identifier: runtimeId }),
         new Promise((_, rej) => setTimeout(() => rej(new Error("SDK timeout")), 9000))
       ]);
 
       const u = sdk.userIdentifier || {};
-      // SDK values take priority over URL params
       if (u.companyId) companyId = String(u.companyId);
       if (u.id)        orgId     = String(u.id);
       if (u.name)      orgName   = String(u.name);
     }
   } catch (e) {
-    // SDK failed or timed out — URL params are our source of truth
-    // This is fine: direct /panel?companyId=X&orgId=Y access works without SDK
     console.warn("SDK init failed, falling back to URL params:", e);
     sdk = null;
   }

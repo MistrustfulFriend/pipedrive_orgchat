@@ -183,9 +183,10 @@ def oauth_start():
 @app.get("/oauth/callback")
 def oauth_callback(request: Request):
     code  = request.query_params.get("code")
-    state = request.query_params.get("state", "")
+    state = request.query_params.get("state")
 
-    if not state or not consume_oauth_state(state):
+    # If state is present, validate it (CSRF protection)
+    if state and not consume_oauth_state(state):
         return JSONResponse({"error": "Invalid or expired state."}, status_code=400)
     if not code:
         return JSONResponse({"error": "No authorisation code returned."}, status_code=400)
