@@ -12,6 +12,17 @@ from urllib.parse import urlencode
 from fastapi.middleware.cors import CORSMiddleware
 from starlette.middleware.base import BaseHTTPMiddleware
 
+from pathlib import Path
+
+BASE_DIR = Path(__file__).resolve().parent
+
+def html_path(filename: str) -> str:
+    # Works whether your files are in ./static/ or next to app.py
+    p1 = BASE_DIR / "static" / filename
+    p2 = BASE_DIR / filename
+    if p1.exists():
+        return str(p1)
+    return str(p2)
 
 # ──────────────────────────────────────────────────────────────
 # App
@@ -199,7 +210,7 @@ def root():
 
 @app.get("/panel")
 def panel():
-    return FileResponse(os.path.join(STATIC_DIR, "panel.html"))
+    return FileResponse(html_path("panel.html"))
 
 
 @app.get("/health")
@@ -250,41 +261,38 @@ def oauth_start():
 
 @app.get("/oauth/callback")
 def oauth_callback(request: Request):
-    _require_env("BASE_URL", BASE_URL)
-    _require_env("PIPEDRIVE_CLIENT_ID", PIPEDRIVE_CLIENT_ID)
-    _require_env("PIPEDRIVE_CLIENT_SECRET", PIPEDRIVE_CLIENT_SECRET)
+    code  = request.query_params.get("code")
+    state = request.query_params.get("state")  # <-- change: None if missing
 
-    redirect_uri = f"{BASE_URL}/oauth/callback"
-
-    code = request.query_params.get("code")
-    state = request.query_params.get("state")
-
-    # Only validate state if it exists
-    if state:
-        if not consume_oauth_state(state):
-            return JSONResponse({"error": "Invalid or expired state."}, status_code=400)
+    # <-- change: validate only if state exists
+    if state and not consume_oauth_state(state):
+        return JSONResponse({"error": "Invalid or expired state."}, status_code=400)
 
     if not code:
         return JSONResponse({"error": "No authorisation code returned."}, status_code=400)
 
+    client_secret = os.getenv("PIPEDRIVE_CLIENT_SECRET", "")
+    if not PIPEDRIVE_CLIENT_ID or not client_secret:
+        return JSONResponse({"error": "Missing client credentials."}, status_code=500)
+
     r = requests.post(
         "https://oauth.pipedrive.com/oauth/token",
         data={
-            "grant_type": "authorization_code",
-            "code": code,
-            "redirect_uri": redirect_uri,
-            "client_id": PIPEDRIVE_CLIENT_ID,
-            "client_secret": PIPEDRIVE_CLIENT_SECRET,
+            "grant_type":    "authorization_code",
+            "code":          code,
+            "redirect_uri":  REDIRECT_URI,
+            "client_id":     PIPEDRIVE_CLIENT_ID,
+            "client_secret": client_secret,
         },
         timeout=30,
     )
     if r.status_code != 200:
         return JSONResponse({"error": "Token exchange failed", "body": r.text}, status_code=400)
 
-    tokens = r.json()
-    access_token = tokens["access_token"]
+    tokens        = r.json()
+    access_token  = tokens["access_token"]
     refresh_token = tokens["refresh_token"]
-    expires_in = int(tokens.get("expires_in", 3600))
+    expires_in    = int(tokens.get("expires_in", 3600))
 
     me = requests.get(
         "https://api.pipedrive.com/v1/users/me",
@@ -295,7 +303,9 @@ def oauth_callback(request: Request):
     company_id = str(me.json()["data"]["company_id"])
 
     save_tokens(company_id, access_token, refresh_token, expires_in)
-    return FileResponse(os.path.join(STATIC_DIR, "oauth_success.html"))
+
+    # <-- change: serve from correct location
+    return FileResponse(html_path("oauth_success.html"))
 
 
 @app.get("/api/status")
