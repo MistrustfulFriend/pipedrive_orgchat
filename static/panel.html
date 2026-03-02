@@ -879,7 +879,7 @@ try {
   if (isIframe) {
     // Timeout wrapper — SDK can hang indefinitely if not in Pipedrive
     sdk = await Promise.race([
-      AppExtensionsSDK.initialize({ identifier: "orgchart-panel" }),
+      AppExtensionsSDK.initialize({ identifier: "ce57ff29-4b39-42a7-9868-f10a99f5d8a9" }),
       new Promise((_, rej) => setTimeout(() => rej(new Error("SDK timeout")), 3000))
     ]);
     const u = sdk.userIdentifier || {};
