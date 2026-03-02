@@ -252,9 +252,12 @@
       position: absolute;
       inset: 0;
       width: 100%; height: 100%;
-      pointer-events: none;
+      pointer-events: none;  /* layer itself transparent */
       z-index: 1;
     }
+    /* edges need their own pointer events to be clickable */
+    #edges-g { pointer-events: all; }
+    #drag-line { pointer-events: none; }
     #nodes-layer {
       position: absolute;
       inset: 0;
@@ -395,8 +398,15 @@
       cursor: pointer;
       transition: stroke .15s;
     }
-    .edge-path:hover { stroke: var(--red); }
-    .edge-path:hover + .edge-del { opacity: 1; }
+    /* invisible wide hit area on top of each edge */
+    .edge-hit {
+      fill: none;
+      stroke: transparent;
+      stroke-width: 12;
+      cursor: pointer;
+    }
+    .edge-hit:hover ~ .edge-path,
+    .edge-group:hover .edge-path { stroke: var(--red); }
 
     #drag-line {
       fill: none;
@@ -777,11 +787,14 @@
     <!-- Not-connected screen -->
     <div id="connect-screen">
       <svg viewBox="0 0 24 24"><circle cx="12" cy="12" r="10"/><line x1="12" y1="8" x2="12" y2="12"/><line x1="12" y1="16" x2="12.01" y2="16"/></svg>
-      <h2>Not connected</h2>
-      <p>Connect this app to your Pipedrive account first.</p>
-      <a href="/oauth/start" target="_blank">
-        <button class="tl-btn primary" style="padding:8px 18px;font-size:13px">Connect to Pipedrive</button>
-      </a>
+      <h2>Not connected to Pipedrive</h2>
+      <p id="connect-msg">Connect this app to your Pipedrive account to search people and save charts.</p>
+      <div style="display:flex;gap:10px;align-items:center">
+        <a href="/oauth/start" target="_blank" id="connect-link">
+          <button class="tl-btn primary" style="padding:8px 18px;font-size:13px">Connect to Pipedrive →</button>
+        </a>
+        <button class="tl-btn" onclick="dismissConnect()" style="padding:8px 14px;font-size:13px">Use without search</button>
+      </div>
     </div>
   </div>
 </div>
@@ -852,26 +865,48 @@
 (async () => {
 
 /* ── SDK + Params ─────────────────────────────────────────────── */
-let sdk, companyId = "", orgId = "", orgName = "";
+// Always read URL params first as reliable fallback
+const _p    = new URLSearchParams(location.search);
+let companyId = _p.get("companyId") || "";
+let orgId     = _p.get("id")        || "";
+let orgName   = _p.get("name")      || "";
+let sdk       = null;
+
+// Only attempt SDK init if we look like we're inside Pipedrive
+// (i.e. loaded in an iframe with a parent origin)
 try {
-  sdk = await AppExtensionsSDK.initialize({ identifier: "__orgchart__" });
-  const u = sdk.userIdentifier || {};
-  companyId = String(u.companyId || new URLSearchParams(location.search).get("companyId") || "");
-  orgId     = String(u.id        || new URLSearchParams(location.search).get("id")        || "");
-  orgName   = String(u.name      || new URLSearchParams(location.search).get("name")      || "");
+  const isIframe = window.self !== window.top;
+  if (isIframe) {
+    // Timeout wrapper — SDK can hang indefinitely if not in Pipedrive
+    sdk = await Promise.race([
+      AppExtensionsSDK.initialize({ identifier: "orgchart-panel" }),
+      new Promise((_, rej) => setTimeout(() => rej(new Error("SDK timeout")), 3000))
+    ]);
+    const u = sdk.userIdentifier || {};
+    // SDK values take priority over URL params
+    if (u.companyId) companyId = String(u.companyId);
+    if (u.id)        orgId     = String(u.id);
+    if (u.name)      orgName   = String(u.name);
+  }
 } catch(e) {
-  const p   = new URLSearchParams(location.search);
-  companyId = p.get("companyId") || "";
-  orgId     = p.get("id")        || "";
-  orgName   = p.get("name")      || "";
+  // SDK failed or timed out — URL params are our source of truth
+  // This is fine: direct /panel?companyId=X access works without SDK
+  sdk = null;
 }
 
 /* ── Auth check ──────────────────────────────────────────────── */
-if (companyId) {
-  const s = await fetch(`/api/status?companyId=${companyId}`).then(r=>r.json()).catch(()=>({connected:false}));
+// Show connect screen if no companyId (standalone, not yet authed)
+// or if companyId is present but token is missing/expired
+if (!companyId) {
+  document.getElementById("connect-screen").classList.add("show");
+  // Don't return — still let the canvas work for demo/manual use
+} else {
+  const s = await fetch(`/api/status?companyId=${companyId}`)
+    .then(r => r.json())
+    .catch(() => ({ connected: false }));
   if (!s.connected) {
     document.getElementById("connect-screen").classList.add("show");
-    return;
+    // Don't return — user might just need to re-auth
   }
 }
 
@@ -965,13 +1000,28 @@ function makeNodeEl(n) {
 function makeEdgeEl(e) {
   const f = nodes[e.from], t = nodes[e.to];
   if (!f || !t) return;
+
+  // Wrap in a <g> so hover state works across both paths
+  const g = document.createElementNS("http://www.w3.org/2000/svg","g");
+  g.id = "ed-"+e.id;
+  g.setAttribute("class","edge-group");
+  g.style.cursor = "pointer";
+
+  // Invisible wide hit area (easier to click thin lines)
+  const hit = document.createElementNS("http://www.w3.org/2000/svg","path");
+  hit.setAttribute("class","edge-hit");
+  hit.setAttribute("d", edgePath(f,t));
+
+  // Visible line
   const path = document.createElementNS("http://www.w3.org/2000/svg","path");
-  path.id = "ed-"+e.id;
   path.setAttribute("class","edge-path");
   path.setAttribute("marker-end","url(#arr)");
   path.setAttribute("d", edgePath(f,t));
-  path.addEventListener("click", ()=>deleteEdge(e.id));
-  edgesEl.appendChild(path);
+
+  g.appendChild(hit);
+  g.appendChild(path);
+  g.addEventListener("click", () => deleteEdge(e.id));
+  edgesEl.appendChild(g);
 }
 
 function edgePath(f, t) {
@@ -989,9 +1039,10 @@ function nodeH(n) { return document.getElementById("nd-"+n.id)?.offsetHeight || 
 function refreshNodeEdges(nid) {
   edges.forEach(e => {
     if (e.from !== nid && e.to !== nid) return;
-    const path = document.getElementById("ed-"+e.id);
-    if (!path) return;
-    path.setAttribute("d", edgePath(nodes[e.from], nodes[e.to]));
+    const g = document.getElementById("ed-"+e.id);
+    if (!g) return;
+    const d = edgePath(nodes[e.from], nodes[e.to]);
+    g.querySelectorAll("path").forEach(p => p.setAttribute("d", d));
   });
 }
 
@@ -1086,9 +1137,10 @@ function addEdge(fromId, toId) {
 }
 
 function deleteEdge(eid) {
-  edges = edges.filter(e=>e.id!==eid);
+  edges = edges.filter(e => e.id !== eid);
   document.getElementById("ed-"+eid)?.remove();
   markDirty();
+  setStatus("Connection removed");
 }
 
 /* ── Node CRUD ───────────────────────────────────────────────── */
@@ -1226,7 +1278,18 @@ window.selectPerson = function(p) {
   document.getElementById("ps-results").style.display = "none";
 };
 
-/* ── Org picker ──────────────────────────────────────────────── */
+/* ── Dismiss connect screen ──────────────────────────────────── */
+window.dismissConnect = function() {
+  document.getElementById("connect-screen").classList.remove("show");
+  setStatus("Running without Pipedrive search");
+};
+
+// Update OAuth link to come back to this panel after auth
+const connectLink = document.getElementById("connect-link");
+if (connectLink) {
+  connectLink.href = `/oauth/start`;
+}
+
 window.toggleOrgDropdown = function() {
   orgPickerOpen = !orgPickerOpen;
   document.getElementById("org-dropdown").style.display = orgPickerOpen ? "block" : "none";

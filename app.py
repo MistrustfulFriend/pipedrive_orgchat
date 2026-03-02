@@ -8,7 +8,32 @@ from fastapi.responses import FileResponse, RedirectResponse, JSONResponse
 from fastapi.staticfiles import StaticFiles
 from urllib.parse import urlencode
 
+from fastapi.middleware.cors import CORSMiddleware
+from starlette.middleware.base import BaseHTTPMiddleware
+
 app = FastAPI()
+
+# Allow Pipedrive to load the panel in an iframe
+app.add_middleware(
+    CORSMiddleware,
+    allow_origins=["https://app.pipedrive.com", "https://*.pipedrive.com"],
+    allow_credentials=True,
+    allow_methods=["*"],
+    allow_headers=["*"],
+)
+
+class IframeHeadersMiddleware(BaseHTTPMiddleware):
+    """Remove X-Frame-Options and set permissive CSP so Pipedrive can embed us."""
+    async def dispatch(self, request, call_next):
+        response = await call_next(request)
+        # Allow framing by Pipedrive
+        response.headers.pop("x-frame-options", None)
+        response.headers["content-security-policy"] = (
+            "frame-ancestors https://app.pipedrive.com https://*.pipedrive.com 'self'"
+        )
+        return response
+
+app.add_middleware(IframeHeadersMiddleware)
 
 BASE_URL             = os.getenv("BASE_URL", "https://orgchart.onrender.com")
 PIPEDRIVE_CLIENT_ID  = os.getenv("PIPEDRIVE_CLIENT_ID", "")
