@@ -750,11 +750,6 @@
 
   <div class="tl-sep"></div>
 
-  <button class="tl-btn" id="connect-btn" onclick="toggleConnect()">
-    <svg viewBox="0 0 24 24"><circle cx="6" cy="12" r="2.5"/><circle cx="18" cy="6" r="2.5"/><circle cx="18" cy="18" r="2.5"/><line x1="8.5" y1="12" x2="15.5" y2="7"/><line x1="8.5" y1="12" x2="15.5" y2="17"/></svg>
-    Connect
-  </button>
-
   <button class="tl-btn" onclick="fitView()">
     <svg viewBox="0 0 24 24"><path d="M8 3H5a2 2 0 00-2 2v3"/><path d="M21 8V5a2 2 0 00-2-2h-3"/><path d="M3 16v3a2 2 0 002 2h3"/><path d="M16 21h3a2 2 0 002-2v-3"/></svg>
     Fit
@@ -805,12 +800,6 @@
     <div class="sb-divider"></div>
     <div class="sb-section">Actions</div>
 
-    <button class="sb-btn" onclick="toggleConnect()">
-      <svg viewBox="0 0 24 24"><circle cx="6" cy="12" r="2.5"/><circle cx="18" cy="6" r="2.5"/><circle cx="18" cy="18" r="2.5"/><line x1="8.5" y1="12" x2="15.5" y2="7"/><line x1="8.5" y1="12" x2="15.5" y2="17"/></svg>
-      Connect mode
-      <span class="sb-badge" id="connect-badge">off</span>
-    </button>
-
     <button class="sb-btn" onclick="fitView()">
       <svg viewBox="0 0 24 24"><path d="M8 3H5a2 2 0 00-2 2v3"/><path d="M21 8V5a2 2 0 00-2-2h-3"/><path d="M3 16v3a2 2 0 002 2h3"/><path d="M16 21h3a2 2 0 002-2v-3"/></svg>
       Fit to screen
@@ -824,13 +813,13 @@
     <div class="sb-divider"></div>
     <div class="sb-section">Tips</div>
     <div style="padding:6px 10px 10px; font-size:11px; color:var(--text3); line-height:1.6;">
-      • Drag nodes to reposition<br>
-      • Drag on canvas or Shift+click to multi-select<br>
-      • Select multiple nodes → drag a port → connect all to one target<br>
-      • Hover a connection → click ✕ to delete or ⇄ to reroute to another node<br>
-      • Click a connection to keep its buttons pinned<br>
-      • Delete key removes selected nodes<br>
-      • Scroll wheel or +/− to zoom
+      • Drag nodes freely to reposition<br>
+      • <b>Connect:</b> hover a node → blue dots appear → drag one to another node<br>
+      • <b>Multi-connect:</b> select nodes first (drag canvas or Shift+click), then drag a port to connect all to one target<br>
+      • <b>Fix wrong connection:</b> hover the line → click ✕ to delete, or drag ⇄ near the arrow to reroute<br>
+      • Click a line to keep its buttons pinned open<br>
+      • Select nodes + Delete key to remove them<br>
+      • Scroll or +/− to zoom
     </div>
   </div>
 
@@ -952,54 +941,55 @@
 <script>
 (async () => {
 
-/* ── SDK + Params ─────────────────────────────────────────────── */
+/* ── SDK + URL params ─────────────────────────────────────────── */
 const _p      = new URLSearchParams(location.search);
 let companyId = _p.get("companyId") || "";
 let orgId     = _p.get("id")        || "";
-let orgName   = _p.get("name")      || "";
+let orgName   = decodeURIComponent(_p.get("name") || "");
 let sdk       = null;
 
-// When loaded inside Pipedrive as a custom modal, the SDK handshake
-// MUST complete — Pipedrive waits for it before showing the iframe.
-// Never timeout or skip it when inside an iframe.
 try {
-  // Pipedrive passes a unique ?id= in the URL when loading the iframe.
-  // The SDK reads it automatically — do NOT hardcode the identifier.
   sdk = await new AppExtensionsSDK().initialize();
+  try { await sdk.execute(Command.RESIZE, { width: 1100, height: 700 }); } catch(e) {}
 
-  // Resize the modal to fill most of the screen
-  try {
-    await sdk.execute(Command.RESIZE, { width: 1100, height: 700 });
-  } catch(e) { /* resize not supported in all contexts */ }
+  // Pipedrive passes the organisation context via customContext or selectedIds
+  // depending on how the extension panel is configured.
+  // Try every known location the SDK may put it.
+  const ctx = sdk.userContext || sdk.context || {};
 
-  const ctx = sdk.userContext    || {};
-  const u   = sdk.userIdentifier || {};
+  // companyId (Pipedrive account ID)
+  if (!companyId) {
+    companyId = String(
+      ctx.companyId || ctx.company_id ||
+      sdk.companyId || sdk.company_id || ""
+    );
+  }
 
-  if (u.companyId) companyId = String(u.companyId);
-  if (ctx.id)      orgId     = String(ctx.id);
-  if (ctx.name)    orgName   = String(ctx.name);
-  if (!orgId   && u.id)   orgId   = String(u.id);
-  if (!orgName && u.name) orgName = String(u.name);
+  // orgId + orgName from the organisation record being viewed
+  if (!orgId) {
+    const id =
+      ctx.id || ctx.org_id || ctx.organization_id ||
+      (ctx.data && ctx.data.id) || "";
+    if (id) orgId = String(id);
+  }
+  if (!orgName) {
+    const name =
+      ctx.name || ctx.org_name ||
+      (ctx.data && ctx.data.name) || "";
+    if (name) orgName = String(name);
+  }
 
 } catch(e) {
-  // Not inside Pipedrive — standalone access via direct URL, use query params
   sdk = null;
 }
 
 /* ── Auth check ──────────────────────────────────────────────── */
-// Show connect screen if no companyId (standalone, not yet authed)
-// or if companyId is present but token is missing/expired
 if (!companyId) {
   document.getElementById("connect-screen").classList.add("show");
-  // Don't return — still let the canvas work for demo/manual use
 } else {
   const s = await fetch(`/api/status?companyId=${companyId}`)
-    .then(r => r.json())
-    .catch(() => ({ connected: false }));
-  if (!s.connected) {
-    document.getElementById("connect-screen").classList.add("show");
-    // Don't return — user might just need to re-auth
-  }
+    .then(r => r.json()).catch(() => ({ connected: false }));
+  if (!s.connected) document.getElementById("connect-screen").classList.add("show");
 }
 
 /* ── State ───────────────────────────────────────────────────── */
@@ -1007,67 +997,81 @@ let nodes   = {};  // id → {id, name, title, dept, pdPersonId, placeholder, x,
 let edges   = [];  // [{id, from, to}]
 let nidC    = 0;
 let eidC    = 0;
-let connecting  = false;
-let connSrc     = null;
+let connSrc       = null;
 let selectedPerson = null;
-let editNodeId  = null;
-let activeTab   = "search";
-let dirty       = false;
-let saveTimer   = null;
+let editNodeId    = null;
+let activeTab     = "search";
+let dirty         = false;
+let saveTimer     = null;
 let orgPickerOpen = false;
-let selectedNodes = new Set(); // multi-select
-let zoomLevel   = 1.0;  // canvas zoom
-let panX = 0, panY = 0; // canvas pan offset
+let selectedNodes = new Set();
+let selectedEdgeId = null;
+// Zoom / pan — stored as a transform applied to BOTH the nodes-layer
+// and the SVG <g> so coordinates always stay in sync.
+let zoom = 1.0, panX = 0, panY = 0;
 
-const canvasEl   = document.getElementById("canvas-wrap");
-const nodesEl    = document.getElementById("nodes-layer");
-const edgesEl    = document.getElementById("edges-g");
-const dragLine   = document.getElementById("drag-line");
-const emptyEl    = document.getElementById("empty-state");
-const banner     = document.getElementById("connect-banner");
-const statusTxt  = document.getElementById("status-text");
-const statusDot  = document.getElementById("status-dot");
-const selBox     = document.getElementById("sel-box");
+const canvasEl  = document.getElementById("canvas-wrap");
+const nodesEl   = document.getElementById("nodes-layer");
+const edgesG    = document.getElementById("edges-g");
+const dragLine  = document.getElementById("drag-line");
+const emptyEl   = document.getElementById("empty-state");
+const banner    = document.getElementById("connect-banner");
+const statusTxt = document.getElementById("status-text");
+const statusDot = document.getElementById("status-dot");
+const selBox    = document.getElementById("sel-box");
 
-// Wrap nodes and SVG in a transform layer
-function applyCanvasTransform() {
-  nodesEl.style.transform = `translate(${panX}px,${panY}px) scale(${zoomLevel})`;
+/* ── Transform helpers ───────────────────────────────────────── */
+// Apply zoom+pan to both layers together so they always match.
+function applyTransform() {
+  const t = `translate(${panX}px,${panY}px) scale(${zoom})`;
+  nodesEl.style.transform = t;
   nodesEl.style.transformOrigin = "0 0";
-  const svgLayer = document.getElementById("svg-layer");
-  svgLayer.style.transform = `translate(${panX}px,${panY}px) scale(${zoomLevel})`;
-  svgLayer.style.transformOrigin = "0 0";
-  document.getElementById("zoom-label").textContent = Math.round(zoomLevel*100)+"%";
+  // The SVG edges-g gets a real SVG transform (not CSS) so SVG coords stay correct
+  edgesG.setAttribute("transform", `translate(${panX},${panY}) scale(${zoom})`);
+  dragLine.setAttribute("transform", `translate(${panX},${panY}) scale(${zoom})`);
+  document.getElementById("zoom-label").textContent = Math.round(zoom*100)+"%";
 }
 
-function zoomIn()  { zoomLevel = Math.min(2.0, zoomLevel + 0.1); applyCanvasTransform(); }
-function zoomOut() { zoomLevel = Math.max(0.25, zoomLevel - 0.1); applyCanvasTransform(); }
+// Convert a mouse event's clientX/Y to canvas logical coordinates
+function clientToCanvas(cx, cy) {
+  const rect = canvasEl.getBoundingClientRect();
+  return [(cx - rect.left - panX) / zoom, (cy - rect.top - panY) / zoom];
+}
 
-document.getElementById("zoom-in-btn").addEventListener("click", zoomIn);
-document.getElementById("zoom-out-btn").addEventListener("click", zoomOut);
+/* ── Zoom ────────────────────────────────────────────────────── */
+function zoomBy(delta, cx, cy) {
+  // Zoom toward the cursor point (cx,cy in client coords)
+  const rect = canvasEl.getBoundingClientRect();
+  const mx = cx !== undefined ? cx - rect.left : rect.width / 2;
+  const my = cy !== undefined ? cy - rect.top  : rect.height / 2;
+  const prev = zoom;
+  zoom = Math.min(2.0, Math.max(0.25, zoom + delta));
+  // Adjust pan so the point under cursor stays fixed
+  panX = mx - (mx - panX) * (zoom / prev);
+  panY = my - (my - panY) * (zoom / prev);
+  applyTransform();
+}
 
-// Mouse wheel zoom
+document.getElementById("zoom-in-btn").addEventListener("click",  () => zoomBy(+0.15));
+document.getElementById("zoom-out-btn").addEventListener("click", () => zoomBy(-0.15));
 canvasEl.addEventListener("wheel", e => {
   e.preventDefault();
-  if (e.deltaY < 0) zoomIn(); else zoomOut();
+  zoomBy(e.deltaY < 0 ? +0.1 : -0.1, e.clientX, e.clientY);
 }, { passive: false });
 
-applyCanvasTransform();
+applyTransform();
 
-/* ── Prefill org from context ────────────────────────────────── */
-// When opened from a Pipedrive company page, orgId + orgName are injected
-// via the SDK context (ctx.id / ctx.name). Load immediately — no search needed.
+/* ── Load org from context ───────────────────────────────────── */
+// If we have orgId from the SDK (opened from a company record), load immediately.
 if (orgId) {
-  const label = orgName || orgId;
-  document.getElementById("org-picker-label").textContent = label;
-  // Show a subtle indicator that the org was auto-detected
-  if (orgName) setStatus(`Loaded: ${orgName}`);
+  document.getElementById("org-picker-label").textContent = orgName || orgId;
   await loadChart();
 }
 
 /* ── Render ──────────────────────────────────────────────────── */
 function renderAll() {
   nodesEl.innerHTML = "";
-  edgesEl.innerHTML = "";
+  while (edgesG.firstChild) edgesG.removeChild(edgesG.firstChild);
   Object.values(nodes).forEach(makeNodeEl);
   edges.forEach(makeEdgeEl);
   syncEmpty();
@@ -1081,6 +1085,7 @@ function initials(n) {
   return (n||"?").trim().split(/\s+/).map(w=>w[0]||"").join("").slice(0,2).toUpperCase();
 }
 
+/* ── Node elements ───────────────────────────────────────────── */
 function makeNodeEl(n) {
   const el = document.createElement("div");
   el.className = "node" + (n.placeholder ? " placeholder-node" : "");
@@ -1124,144 +1129,181 @@ function makeNodeEl(n) {
   nodesEl.appendChild(el);
 }
 
-function makeEdgeEl(e) {
-  const f = nodes[e.from], t = nodes[e.to];
-  if (!f || !t) return;
+function nodeW(n) { return document.getElementById("nd-"+n.id)?.offsetWidth  || 190; }
+function nodeH(n) { return document.getElementById("nd-"+n.id)?.offsetHeight || 110; }
 
-  const g = document.createElementNS("http://www.w3.org/2000/svg","g");
-  g.id = "ed-"+e.id;
-  g.setAttribute("class","edge-group");
-
-  // Invisible wide hit area (for hover detection)
-  const hit = document.createElementNS("http://www.w3.org/2000/svg","path");
-  hit.setAttribute("class","edge-hit");
-  hit.setAttribute("d", edgePath(f,t));
-
-  // Visible line
-  const path = document.createElementNS("http://www.w3.org/2000/svg","path");
-  path.setAttribute("class","edge-path");
-  path.setAttribute("marker-end","url(#arr)");
-  path.setAttribute("d", edgePath(f,t));
-
-  // Click on line selects the edge (to keep buttons visible without hover)
-  hit.addEventListener("click", (ev) => {
-    ev.stopPropagation();
-    selectEdge(e.id);
-  });
-
-  // ── Delete (✕) button at midpoint ────────────────────────
-  const [mx, my] = edgeMidpoint(f, t);
-  const delG = document.createElementNS("http://www.w3.org/2000/svg","g");
-  delG.setAttribute("class","edge-del-btn");
-  delG.setAttribute("transform",`translate(${mx},${my})`);
-
-  const circle = document.createElementNS("http://www.w3.org/2000/svg","circle");
-  circle.setAttribute("class","edge-del-circle");
-  circle.setAttribute("r","8");
-
-  const dx1 = document.createElementNS("http://www.w3.org/2000/svg","line");
-  dx1.setAttribute("class","edge-del-x");
-  dx1.setAttribute("x1","-3"); dx1.setAttribute("y1","-3");
-  dx1.setAttribute("x2","3");  dx1.setAttribute("y2","3");
-  const dx2 = document.createElementNS("http://www.w3.org/2000/svg","line");
-  dx2.setAttribute("class","edge-del-x");
-  dx2.setAttribute("x1","3");  dx2.setAttribute("y1","-3");
-  dx2.setAttribute("x2","-3"); dx2.setAttribute("y2","3");
-
-  delG.appendChild(circle); delG.appendChild(dx1); delG.appendChild(dx2);
-  delG.addEventListener("click", (ev) => { ev.stopPropagation(); deleteEdge(e.id); });
-
-  // ── Reroute (⇄) button near the arrowhead ─────────────────
-  const [rx, ry] = edgeArrowPos(f, t);
-  const rerouteG = document.createElementNS("http://www.w3.org/2000/svg","g");
-  rerouteG.setAttribute("class","edge-reroute-btn");
-  rerouteG.setAttribute("transform",`translate(${rx},${ry})`);
-
-  const rc = document.createElementNS("http://www.w3.org/2000/svg","circle");
-  rc.setAttribute("class","edge-reroute-circle");
-  rc.setAttribute("r","8");
-
-  // Two small arrows inside: → ←
-  const ra = document.createElementNS("http://www.w3.org/2000/svg","polyline");
-  ra.setAttribute("class","edge-reroute-arrow");
-  ra.setAttribute("points","-4,0 0,-3 4,0");
-  const ra2 = document.createElementNS("http://www.w3.org/2000/svg","line");
-  ra2.setAttribute("class","edge-reroute-arrow");
-  ra2.setAttribute("x1","0"); ra2.setAttribute("y1","-3");
-  ra2.setAttribute("x2","0"); ra2.setAttribute("y2","3");
-
-  rerouteG.appendChild(rc); rerouteG.appendChild(ra); rerouteG.appendChild(ra2);
-  rerouteG.addEventListener("mousedown", (ev) => {
-    ev.stopPropagation();
-    ev.preventDefault();
-    startEdgeReroute(e.id, ev);
-  });
-
-  g.appendChild(hit);
-  g.appendChild(path);
-  g.appendChild(delG);
-  g.appendChild(rerouteG);
-  edgesEl.appendChild(g);
-}
-
-/* Returns a point close to the arrowhead (near the "to" node) */
-function edgeArrowPos(f, t) {
+/* ── Edge elements ───────────────────────────────────────────── */
+function edgePath(f, t) {
   const fw = nodeW(f), fh = nodeH(f), tw = nodeW(t), th = nodeH(t);
   const fcx = f.x + fw/2, fcy = f.y + fh/2;
   const tcx = t.x + tw/2, tcy = t.y + th/2;
   const dx = tcx - fcx, dy = tcy - fcy;
-  // Approximately 1/5 from the arrowhead along the bezier (t=0.85)
-  let x2, y2;
+  let x1, y1, x2, y2, cpx1, cpy1, cpx2, cpy2;
   if (Math.abs(dx) > Math.abs(dy)) {
-    x2 = dx > 0 ? t.x       : t.x + tw;
-    y2 = tcy;
+    if (dx > 0) { x1 = f.x+fw; y1 = fcy; x2 = t.x;    y2 = tcy; }
+    else        { x1 = f.x;    y1 = fcy; x2 = t.x+tw;  y2 = tcy; }
+    const g = Math.abs(x2-x1)*0.5;
+    cpx1 = x1+(dx>0?g:-g); cpy1 = y1;
+    cpx2 = x2-(dx>0?g:-g); cpy2 = y2;
   } else {
-    x2 = tcx;
-    y2 = dy > 0 ? t.y       : t.y + th;
+    if (dy > 0) { x1 = fcx; y1 = f.y+fh; x2 = tcx; y2 = t.y;    }
+    else        { x1 = fcx; y1 = f.y;     x2 = tcx; y2 = t.y+th; }
+    const g = Math.abs(y2-y1)*0.5;
+    cpx1 = x1; cpy1 = y1+(dy>0?g:-g);
+    cpx2 = x2; cpy2 = y2-(dy>0?g:-g);
   }
-  // Offset the handle slightly away from the node edge so it doesn't overlap
-  const ox = dx > 0 ? -18 : (dx < 0 ? 18 : 0);
-  const oy = dy > 0 ? -18 : (dy < 0 ? 18 : 0);
-  return [x2 + ox, y2 + oy];
+  return `M${x1},${y1} C${cpx1},${cpy1} ${cpx2},${cpy2} ${x2},${y2}`;
 }
 
-/* Reroute: drag the arrowhead end to a new target node */
+function edgeMidpoint(f, t) {
+  const fw = nodeW(f), fh = nodeH(f), tw = nodeW(t), th = nodeH(t);
+  const fcx = f.x+fw/2, fcy = f.y+fh/2, tcx = t.x+tw/2, tcy = t.y+th/2;
+  const dx = tcx-fcx, dy = tcy-fcy;
+  let x1,y1,x2,y2;
+  if (Math.abs(dx) > Math.abs(dy)) {
+    if (dx>0) { x1=f.x+fw; y1=fcy; x2=t.x;   y2=tcy; }
+    else      { x1=f.x;    y1=fcy; x2=t.x+tw; y2=tcy; }
+  } else {
+    if (dy>0) { x1=fcx; y1=f.y+fh; x2=tcx; y2=t.y;    }
+    else      { x1=fcx; y1=f.y;    x2=tcx; y2=t.y+th;  }
+  }
+  const cp = Math.abs((Math.abs(dx)>Math.abs(dy)?y2-y1:x2-x1))*0.5;
+  // Cubic bezier midpoint at t=0.5
+  const c1x = Math.abs(dx)>Math.abs(dy) ? x1+(dx>0?Math.abs(x2-x1)*0.5:-Math.abs(x2-x1)*0.5) : x1;
+  const c2x = Math.abs(dx)>Math.abs(dy) ? x2-(dx>0?Math.abs(x2-x1)*0.5:-Math.abs(x2-x1)*0.5) : x2;
+  const c1y = Math.abs(dx)>Math.abs(dy) ? y1 : y1+(dy>0?Math.abs(y2-y1)*0.5:-Math.abs(y2-y1)*0.5);
+  const c2y = Math.abs(dx)>Math.abs(dy) ? y2 : y2-(dy>0?Math.abs(y2-y1)*0.5:-Math.abs(y2-y1)*0.5);
+  const mx = 0.125*x1 + 0.375*c1x + 0.375*c2x + 0.125*x2;
+  const my = 0.125*y1 + 0.375*c1y + 0.375*c2y + 0.125*y2;
+  return [mx, my];
+}
+
+// Position for the reroute handle — near the arrowhead, offset inward
+function edgeTailPos(f, t) {
+  const fw = nodeW(f), fh = nodeH(f), tw = nodeW(t), th = nodeH(t);
+  const fcx = f.x+fw/2, fcy = f.y+fh/2, tcx = t.x+tw/2, tcy = t.y+th/2;
+  const dx = tcx-fcx, dy = tcy-fcy;
+  let ex, ey;
+  if (Math.abs(dx) > Math.abs(dy)) {
+    ex = dx > 0 ? t.x : t.x+tw;
+    ey = tcy;
+    ex += dx > 0 ? -20 : 20;
+  } else {
+    ex = tcx;
+    ey = dy > 0 ? t.y : t.y+th;
+    ey += dy > 0 ? -20 : 20;
+  }
+  return [ex, ey];
+}
+
+function svgEl(tag) { return document.createElementNS("http://www.w3.org/2000/svg", tag); }
+
+function makeEdgeEl(e) {
+  const f = nodes[e.from], t = nodes[e.to];
+  if (!f || !t) return;
+
+  const g = svgEl("g");
+  g.id = "ed-"+e.id;
+  g.className.baseVal = "edge-group";
+
+  const hit = svgEl("path");
+  hit.setAttribute("class","edge-hit");
+  hit.setAttribute("d", edgePath(f,t));
+  hit.addEventListener("click", ev => { ev.stopPropagation(); selectEdge(e.id); });
+
+  const path = svgEl("path");
+  path.setAttribute("class","edge-path");
+  path.setAttribute("marker-end","url(#arr)");
+  path.setAttribute("d", edgePath(f,t));
+
+  // ── Delete ✕ at midpoint
+  const [mx,my] = edgeMidpoint(f,t);
+  const delG = svgEl("g");
+  delG.setAttribute("class","edge-del-btn");
+  delG.setAttribute("transform",`translate(${mx},${my})`);
+  const dc = svgEl("circle"); dc.setAttribute("class","edge-del-circle"); dc.setAttribute("r","8");
+  const dl1 = svgEl("line"); dl1.setAttribute("class","edge-del-x");
+  dl1.setAttribute("x1","-3"); dl1.setAttribute("y1","-3"); dl1.setAttribute("x2","3"); dl1.setAttribute("y2","3");
+  const dl2 = svgEl("line"); dl2.setAttribute("class","edge-del-x");
+  dl2.setAttribute("x1","3"); dl2.setAttribute("y1","-3"); dl2.setAttribute("x2","-3"); dl2.setAttribute("y2","3");
+  delG.appendChild(dc); delG.appendChild(dl1); delG.appendChild(dl2);
+  delG.addEventListener("click", ev => { ev.stopPropagation(); deleteEdge(e.id); });
+
+  // ── Reroute ⇄ near arrowhead
+  const [rx,ry] = edgeTailPos(f,t);
+  const rrG = svgEl("g");
+  rrG.setAttribute("class","edge-reroute-btn");
+  rrG.setAttribute("transform",`translate(${rx},${ry})`);
+  const rrc = svgEl("circle"); rrc.setAttribute("class","edge-reroute-circle"); rrc.setAttribute("r","8");
+  // Arrow icon: ↺
+  const rra = svgEl("polyline"); rra.setAttribute("class","edge-reroute-arrow"); rra.setAttribute("points","-3,-3 0,3 3,-3");
+  rrG.appendChild(rrc); rrG.appendChild(rra);
+  rrG.addEventListener("mousedown", ev => { ev.stopPropagation(); ev.preventDefault(); startEdgeReroute(e.id, ev); });
+
+  g.appendChild(hit); g.appendChild(path); g.appendChild(delG); g.appendChild(rrG);
+  edgesG.appendChild(g);
+}
+
+function refreshNodeEdges(nid) {
+  edges.forEach(e => {
+    if (e.from !== nid && e.to !== nid) return;
+    const g = document.getElementById("ed-"+e.id);
+    if (!g) return;
+    const f = nodes[e.from], t = nodes[e.to];
+    const d = edgePath(f,t);
+    g.querySelectorAll(".edge-hit,.edge-path").forEach(p => p.setAttribute("d",d));
+    const [mx,my] = edgeMidpoint(f,t);
+    g.querySelector(".edge-del-btn")?.setAttribute("transform",`translate(${mx},${my})`);
+    const [rx,ry] = edgeTailPos(f,t);
+    g.querySelector(".edge-reroute-btn")?.setAttribute("transform",`translate(${rx},${ry})`);
+  });
+}
+
+/* ── Edge selection ──────────────────────────────────────────── */
+function selectEdge(eid) {
+  clearEdgeSelection();
+  selectedEdgeId = eid;
+  document.getElementById("ed-"+eid)?.classList.add("edge-selected");
+}
+function clearEdgeSelection() {
+  if (selectedEdgeId != null) {
+    document.getElementById("ed-"+selectedEdgeId)?.classList.remove("edge-selected");
+    selectedEdgeId = null;
+  }
+}
+canvasEl.addEventListener("click", e => {
+  if (!e.target.closest(".edge-group")) clearEdgeSelection();
+});
+
+/* ── Edge reroute ────────────────────────────────────────────── */
 function startEdgeReroute(edgeId, ev) {
   const edge = edges.find(e => e.id === edgeId);
   if (!edge) return;
-  const f = nodes[edge.from];
-  if (!f) return;
+  const g = document.getElementById("ed-"+edgeId);
+  if (g) g.style.opacity = "0.3";
 
-  // Show drag line from the "from" node
-  const rect = canvasEl.getBoundingClientRect();
-  const [px, py] = portPos(edge.from, "bottom");
-  dragLine.setAttribute("x1", px); dragLine.setAttribute("y1", py);
-  dragLine.setAttribute("x2", (ev.clientX - rect.left) / zoomLevel);
-  dragLine.setAttribute("y2", (ev.clientY - rect.top)  / zoomLevel);
+  const [sx, sy] = portPos(edge.from, "bottom");
+  dragLine.setAttribute("x1", sx); dragLine.setAttribute("y1", sy);
+  const [lx, ly] = clientToCanvas(ev.clientX, ev.clientY);
+  dragLine.setAttribute("x2", lx); dragLine.setAttribute("y2", ly);
   dragLine.style.display = "block";
-  banner.textContent = "⇄ Drop on a new node to reroute — Esc to cancel";
+  banner.textContent = "⇄ Drop on a node to reroute this connection — Esc to cancel";
   banner.style.display = "block";
 
-  // Visually hide the existing edge while rerouting
-  const existingG = document.getElementById("ed-"+edgeId);
-  if (existingG) existingG.style.opacity = "0.25";
-
   function onMove(me) {
-    dragLine.setAttribute("x2", (me.clientX - rect.left) / zoomLevel);
-    dragLine.setAttribute("y2", (me.clientY - rect.top)  / zoomLevel);
+    const [cx2,cy2] = clientToCanvas(me.clientX, me.clientY);
+    dragLine.setAttribute("x2", cx2); dragLine.setAttribute("y2", cy2);
   }
   function onUp(me) {
     dragLine.style.display = "none";
     banner.style.display = "none";
-    banner.textContent = "⇄ Drag from a port to connect — Esc to cancel";
-    if (existingG) existingG.style.opacity = "";
+    banner.textContent = "⇄ Drag from a port to connect";
+    if (g) g.style.opacity = "";
     document.removeEventListener("mousemove", onMove);
     document.removeEventListener("mouseup", onUp);
-
-    const hitEl = document.elementFromPoint(me.clientX, me.clientY)?.closest(".node");
-    if (hitEl && hitEl.id !== "nd-"+edge.from) {
-      const newTo = hitEl.id.replace("nd-","");
-      // Remove old edge, add new one (reuse same from)
+    const hit = document.elementFromPoint(me.clientX, me.clientY)?.closest(".node");
+    if (hit && hit.id !== "nd-"+edge.from) {
+      const newTo = hit.id.replace("nd-","");
       edges = edges.filter(e => e.id !== edgeId);
       document.getElementById("ed-"+edgeId)?.remove();
       addEdge(edge.from, newTo);
@@ -1273,177 +1315,94 @@ function startEdgeReroute(edgeId, ev) {
   document.addEventListener("mouseup", onUp);
 }
 
-function edgeMidpoint(f, t) {
-  const fw = nodeW(f), fh = nodeH(f), tw = nodeW(t);
-  const x1 = f.x + fw/2, y1 = f.y + fh;
-  const x2 = t.x + tw/2, y2 = t.y;
-  const cp = Math.abs(y2-y1) * 0.5;
-  // Midpoint of cubic bezier at t=0.5
-  const mx = 0.125*x1 + 0.375*(x1) + 0.375*(x2) + 0.125*x2;
-  const c1y = y1+cp, c2y = y2-cp;
-  const my = 0.125*y1 + 0.375*c1y + 0.375*c2y + 0.125*y2;
-  return [mx, my];
-}
-
-function edgePath(f, t) {
-  const fw = nodeW(f), fh = nodeH(f);
-  const tw = nodeW(t), th = nodeH(t);
-
-  // Centre points
-  const fcx = f.x + fw/2, fcy = f.y + fh/2;
-  const tcx = t.x + tw/2, tcy = t.y + th/2;
-
-  const dx = tcx - fcx;
-  const dy = tcy - fcy;
-
-  let x1, y1, x2, y2, cpx1, cpy1, cpx2, cpy2;
-
-  if (Math.abs(dx) > Math.abs(dy)) {
-    // Nodes are more side-by-side → use left/right ports
-    if (dx > 0) {
-      x1 = f.x + fw; y1 = fcy;   // right of from
-      x2 = t.x;      y2 = tcy;   // left of to
-    } else {
-      x1 = f.x;      y1 = fcy;   // left of from
-      x2 = t.x + tw; y2 = tcy;   // right of to
-    }
-    const gap = Math.abs(x2 - x1) * 0.5;
-    cpx1 = x1 + (dx > 0 ? gap : -gap); cpy1 = y1;
-    cpx2 = x2 - (dx > 0 ? gap : -gap); cpy2 = y2;
-  } else {
-    // Nodes are more above/below → use top/bottom ports
-    if (dy > 0) {
-      x1 = fcx; y1 = f.y + fh;  // bottom of from
-      x2 = tcx; y2 = t.y;        // top of to
-    } else {
-      x1 = fcx; y1 = f.y;        // top of from
-      x2 = tcx; y2 = t.y + th;   // bottom of to
-    }
-    const gap = Math.abs(y2 - y1) * 0.5;
-    cpx1 = x1; cpy1 = y1 + (dy > 0 ? gap : -gap);
-    cpx2 = x2; cpy2 = y2 - (dy > 0 ? gap : -gap);
-  }
-
-  return `M${x1},${y1} C${cpx1},${cpy1} ${cpx2},${cpy2} ${x2},${y2}`;
-}
-
-function nodeW(n) { return document.getElementById("nd-"+n.id)?.offsetWidth || 190; }
-function nodeH(n) { return document.getElementById("nd-"+n.id)?.offsetHeight || 110; }
-
-function refreshNodeEdges(nid) {
-  edges.forEach(e => {
-    if (e.from !== nid && e.to !== nid) return;
-    const g = document.getElementById("ed-"+e.id);
-    if (!g) return;
-    const f = nodes[e.from], t = nodes[e.to];
-    const d = edgePath(f, t);
-    g.querySelectorAll(".edge-hit, .edge-path").forEach(p => p.setAttribute("d", d));
-    // Reposition delete button
-    const [mx, my] = edgeMidpoint(f, t);
-    const delBtn = g.querySelector(".edge-del-btn");
-    if (delBtn) delBtn.setAttribute("transform", `translate(${mx},${my})`);
-    // Reposition reroute button
-    const [rx, ry] = edgeArrowPos(f, t);
-    const rerouteBtn = g.querySelector(".edge-reroute-btn");
-    if (rerouteBtn) rerouteBtn.setAttribute("transform", `translate(${rx},${ry})`);
+/* ── Port connections ────────────────────────────────────────── */
+function setupPorts(el, nodeId) {
+  el.querySelectorAll(".port").forEach(port => {
+    port.addEventListener("mousedown", e => {
+      e.stopPropagation(); e.preventDefault();
+      startEdgeDrag(nodeId, e);
+    });
   });
 }
 
-/* ── Edge selection (keeps action buttons visible after click) ── */
-let selectedEdgeId = null;
+function portPos(nodeId, side) {
+  const n = nodes[nodeId];
+  const w = nodeW(n), h = nodeH(n);
+  if (side === "top")   return [n.x+w/2, n.y];
+  if (side === "left")  return [n.x,     n.y+h/2];
+  if (side === "right") return [n.x+w,   n.y+h/2];
+  return [n.x+w/2, n.y+h];
+}
 
-function selectEdge(eid) {
+function startEdgeDrag(fromId, ev) {
+  connSrc = fromId;
   clearEdgeSelection();
-  selectedEdgeId = eid;
-  document.getElementById("ed-"+eid)?.classList.add("edge-selected");
-}
 
-function clearEdgeSelection() {
-  if (selectedEdgeId != null) {
-    document.getElementById("ed-"+selectedEdgeId)?.classList.remove("edge-selected");
-    selectedEdgeId = null;
+  const isGroupDrag = selectedNodes.has(fromId) && selectedNodes.size >= 2;
+  const groupIds = isGroupDrag ? [...selectedNodes] : [fromId];
+
+  const side = ev.target.dataset.side || "bottom";
+  const [sx, sy] = portPos(fromId, side);
+  dragLine.setAttribute("x1", sx); dragLine.setAttribute("y1", sy);
+  const [lx, ly] = clientToCanvas(ev.clientX, ev.clientY);
+  dragLine.setAttribute("x2", lx); dragLine.setAttribute("y2", ly);
+  dragLine.style.display = "block";
+  banner.textContent = isGroupDrag
+    ? `⇄ Drop on a node to connect all ${groupIds.length} selected nodes to it`
+    : "⇄ Drag to another node to connect — Esc to cancel";
+  banner.style.display = "block";
+
+  function onMove(me) {
+    const [cx2,cy2] = clientToCanvas(me.clientX, me.clientY);
+    dragLine.setAttribute("x2", cx2); dragLine.setAttribute("y2", cy2);
   }
-}
-
-// Click on blank canvas clears edge selection
-canvasEl.addEventListener("click", e => {
-  if (!e.target.closest(".edge-group")) clearEdgeSelection();
-});
-
-/* ── Rubber-band multi-select ────────────────────────────────── */
-let selStart = null;
-
-canvasEl.addEventListener("mousedown", e => {
-  if (connecting) return;
-  if (e.target.closest(".node") || e.target.closest("#zoom-controls")) return;
-  if (e.target.closest("#edges-g")) return;
-  // Start rubber-band
-  const rect = canvasEl.getBoundingClientRect();
-  selStart = { x: e.clientX - rect.left, y: e.clientY - rect.top };
-  selBox.style.left   = selStart.x + "px";
-  selBox.style.top    = selStart.y + "px";
-  selBox.style.width  = "0px";
-  selBox.style.height = "0px";
-  selBox.style.display = "block";
-  // Clear selection unless shift
-  if (!e.shiftKey) { selectedNodes.clear(); syncSelection(); }
-});
-
-document.addEventListener("mousemove", e => {
-  if (!selStart) return;
-  const rect = canvasEl.getBoundingClientRect();
-  const cx = e.clientX - rect.left, cy = e.clientY - rect.top;
-  const x = Math.min(selStart.x, cx), y = Math.min(selStart.y, cy);
-  const w = Math.abs(cx - selStart.x), h = Math.abs(cy - selStart.y);
-  selBox.style.left = x+"px"; selBox.style.top = y+"px";
-  selBox.style.width = w+"px"; selBox.style.height = h+"px";
-  // Highlight nodes inside rubber-band (account for zoom/pan)
-  const selRect = { x, y, w, h };
-  Object.values(nodes).forEach(n => {
-    const nx = n.x * zoomLevel + panX, ny = n.y * zoomLevel + panY;
-    const nw = nodeW(n) * zoomLevel, nh = nodeH(n) * zoomLevel;
-    const inside = nx < selRect.x + selRect.w && nx + nw > selRect.x &&
-                   ny < selRect.y + selRect.h && ny + nh > selRect.y;
-    const el = document.getElementById("nd-"+n.id);
-    if (el) el.classList.toggle("selected", inside);
-  });
-});
-
-document.addEventListener("mouseup", e => {
-  if (!selStart) return;
-  selBox.style.display = "none";
-  // Commit selection
-  Object.values(nodes).forEach(n => {
-    const el = document.getElementById("nd-"+n.id);
-    if (el && el.classList.contains("selected")) selectedNodes.add(n.id);
-  });
-  selStart = null;
-});
-
-function syncSelection() {
-  Object.keys(nodes).forEach(nid => {
-    const el = document.getElementById("nd-"+nid);
-    if (el) el.classList.toggle("selected", selectedNodes.has(nid));
-  });
-}
-
-// Toggle node selection on click (without dragging)
-function onNodeClick(nid, e) {
-  if (e.shiftKey) {
-    if (selectedNodes.has(nid)) selectedNodes.delete(nid);
-    else selectedNodes.add(nid);
-  } else {
-    selectedNodes.clear();
-    selectedNodes.add(nid);
+  function onUp(me) {
+    dragLine.style.display = "none";
+    banner.style.display = "none";
+    banner.textContent = "⇄ Drag from a port to connect";
+    connSrc = null;
+    document.removeEventListener("mousemove", onMove);
+    document.removeEventListener("mouseup", onUp);
+    const hit = document.elementFromPoint(me.clientX, me.clientY)?.closest(".node");
+    if (hit) {
+      const toId = hit.id.replace("nd-","");
+      if (isGroupDrag) {
+        let count = 0;
+        groupIds.forEach(gid => { if (gid !== toId && addEdge(gid, toId)) count++; });
+        if (count) setStatus(`Connected ${count} nodes`);
+      } else if (toId !== fromId) {
+        addEdge(fromId, toId);
+      }
+    }
   }
-  syncSelection();
+  document.addEventListener("mousemove", onMove);
+  document.addEventListener("mouseup", onUp);
 }
+
+function addEdge(fromId, toId) {
+  if (edges.find(e=>e.from===fromId&&e.to===toId)) return false;
+  if (fromId === toId) return false;
+  const e = {id: ++eidC, from: fromId, to: toId};
+  edges.push(e);
+  makeEdgeEl(e);
+  markDirty();
+  return true;
+}
+
+function deleteEdge(eid) {
+  edges = edges.filter(e => e.id !== eid);
+  document.getElementById("ed-"+eid)?.remove();
+  clearEdgeSelection();
+  markDirty();
+  setStatus("Connection removed");
+}
+
+/* ── Drag nodes ──────────────────────────────────────────────── */
 function dragNode(el, n) {
   let ox, oy, nx0, ny0, active = false, didMove = false;
   let groupSnap = {};
 
   el.addEventListener("mousedown", e => {
-    if (connecting) return;
     if (e.target.closest(".nha-btn")) return;
     if (e.target.closest(".port")) return;
     e.preventDefault();
@@ -1451,7 +1410,7 @@ function dragNode(el, n) {
     ox = e.clientX; oy = e.clientY; nx0 = n.x; ny0 = n.y;
     if (selectedNodes.has(n.id)) {
       groupSnap = {};
-      selectedNodes.forEach(nid => { if (nodes[nid]) groupSnap[nid] = {x: nodes[nid].x, y: nodes[nid].y}; });
+      selectedNodes.forEach(nid => { if (nodes[nid]) groupSnap[nid] = {x:nodes[nid].x, y:nodes[nid].y}; });
     }
     el.classList.add("dragging");
   });
@@ -1459,20 +1418,18 @@ function dragNode(el, n) {
   document.addEventListener("mousemove", e => {
     if (!active) return;
     didMove = true;
-    const dx = (e.clientX - ox) / zoomLevel;
-    const dy = (e.clientY - oy) / zoomLevel;
+    const dx = (e.clientX - ox) / zoom;
+    const dy = (e.clientY - oy) / zoom;
     if (selectedNodes.has(n.id) && Object.keys(groupSnap).length > 1) {
       selectedNodes.forEach(nid => {
-        const snap = groupSnap[nid];
-        if (!snap) return;
-        nodes[nid].x = snap.x + dx;
-        nodes[nid].y = snap.y + dy;
+        const s = groupSnap[nid]; if (!s) return;
+        nodes[nid].x = s.x+dx; nodes[nid].y = s.y+dy;
         const nel = document.getElementById("nd-"+nid);
-        if (nel) { nel.style.left = nodes[nid].x+"px"; nel.style.top = nodes[nid].y+"px"; }
+        if (nel) { nel.style.left=nodes[nid].x+"px"; nel.style.top=nodes[nid].y+"px"; }
         refreshNodeEdges(nid);
       });
     } else {
-      n.x = nx0 + dx; n.y = ny0 + dy;
+      n.x = nx0+dx; n.y = ny0+dy;
       el.style.left = n.x+"px"; el.style.top = n.y+"px";
       refreshNodeEdges(n.id);
     }
@@ -1487,114 +1444,71 @@ function dragNode(el, n) {
   });
 }
 
-/* ── Port connections ────────────────────────────────────────── */
-function setupPorts(el, nodeId) {
-  el.querySelectorAll(".port").forEach(port => {
-    port.addEventListener("mousedown", e => {
-      e.stopPropagation();
-      e.preventDefault();
-      startEdgeDrag(nodeId, e);
-    });
+/* ── Multi-select rubber-band ────────────────────────────────── */
+let selStart = null;
+
+canvasEl.addEventListener("mousedown", e => {
+  if (e.target.closest(".node") || e.target.closest("#zoom-controls")) return;
+  if (e.target.closest(".edge-group")) return;
+  const rect = canvasEl.getBoundingClientRect();
+  selStart = { x: e.clientX - rect.left, y: e.clientY - rect.top };
+  selBox.style.cssText = `display:block;left:${selStart.x}px;top:${selStart.y}px;width:0;height:0`;
+  if (!e.shiftKey) { selectedNodes.clear(); syncSelection(); }
+});
+
+document.addEventListener("mousemove", e => {
+  if (!selStart) return;
+  const rect = canvasEl.getBoundingClientRect();
+  const cx = e.clientX - rect.left, cy = e.clientY - rect.top;
+  const x = Math.min(selStart.x,cx), y = Math.min(selStart.y,cy);
+  const w = Math.abs(cx-selStart.x), h = Math.abs(cy-selStart.y);
+  selBox.style.left=x+"px"; selBox.style.top=y+"px";
+  selBox.style.width=w+"px"; selBox.style.height=h+"px";
+  // Highlight nodes inside band — convert band to logical coords
+  const lx1=(x-panX)/zoom, ly1=(y-panY)/zoom;
+  const lx2=(x+w-panX)/zoom, ly2=(y+h-panY)/zoom;
+  Object.values(nodes).forEach(n => {
+    const nw=nodeW(n), nh=nodeH(n);
+    const inside = n.x<lx2 && n.x+nw>lx1 && n.y<ly2 && n.y+nh>ly1;
+    document.getElementById("nd-"+n.id)?.classList.toggle("selected", inside);
+  });
+});
+
+document.addEventListener("mouseup", e => {
+  if (!selStart) return;
+  selBox.style.display = "none";
+  Object.values(nodes).forEach(n => {
+    if (document.getElementById("nd-"+n.id)?.classList.contains("selected"))
+      selectedNodes.add(n.id);
+  });
+  selStart = null;
+});
+
+function syncSelection() {
+  Object.keys(nodes).forEach(nid => {
+    document.getElementById("nd-"+nid)?.classList.toggle("selected", selectedNodes.has(nid));
   });
 }
 
-function portPos(nodeId, side) {
-  const n = nodes[nodeId];
-  const w = nodeW(n), h = nodeH(n);
-  if (side === "top")    return [n.x + w/2, n.y];
-  if (side === "left")   return [n.x,       n.y + h/2];
-  if (side === "right")  return [n.x + w,   n.y + h/2];
-  return [n.x + w/2, n.y + h]; // bottom (default)
-}
-
-function startEdgeDrag(fromId, e) {
-  connSrc = fromId;
-  clearEdgeSelection();
-
-  // If this node is part of a multi-selection (≥2), we'll connect ALL selected nodes
-  const isGroupDrag = selectedNodes.has(fromId) && selectedNodes.size >= 2;
-  const groupIds = isGroupDrag ? [...selectedNodes] : [fromId];
-
-  const rect = canvasEl.getBoundingClientRect();
-  const side = e.target.dataset.side || "bottom";
-  const [px, py] = portPos(fromId, side);
-  dragLine.setAttribute("x1", px); dragLine.setAttribute("y1", py);
-  dragLine.setAttribute("x2", (e.clientX - rect.left) / zoomLevel);
-  dragLine.setAttribute("y2", (e.clientY - rect.top)  / zoomLevel);
-  dragLine.style.display = "block";
-
-  if (isGroupDrag) {
-    banner.textContent = `⇄ Drop on a node to connect all ${groupIds.length} selected nodes to it`;
+function onNodeClick(nid, e) {
+  if (e.shiftKey) {
+    if (selectedNodes.has(nid)) selectedNodes.delete(nid);
+    else selectedNodes.add(nid);
   } else {
-    banner.textContent = "⇄ Drag from a port to connect — Esc to cancel";
+    selectedNodes.clear();
+    selectedNodes.add(nid);
   }
-  banner.style.display = "block";
-
-  function onMove(me) {
-    dragLine.setAttribute("x2", (me.clientX - rect.left) / zoomLevel);
-    dragLine.setAttribute("y2", (me.clientY - rect.top)  / zoomLevel);
-  }
-  function onUp(me) {
-    dragLine.style.display = "none";
-    banner.style.display = "none";
-    banner.textContent = "⇄ Drag from a port to connect — Esc to cancel";
-    connSrc = null;
-    document.removeEventListener("mousemove", onMove);
-    document.removeEventListener("mouseup", onUp);
-
-    const hit = document.elementFromPoint(me.clientX, me.clientY)?.closest(".node");
-    if (hit) {
-      const toId = hit.id.replace("nd-","");
-      if (isGroupDrag) {
-        // Connect every selected node → target (skip target itself)
-        groupIds.forEach(gid => {
-          if (gid !== toId) addEdge(gid, toId);
-        });
-        if (groupIds.length > 1) setStatus(`Connected ${groupIds.filter(g=>g!==toId).length} nodes → target`);
-      } else {
-        if (toId !== fromId) addEdge(fromId, toId);
-      }
-    }
-  }
-  document.addEventListener("mousemove", onMove);
-  document.addEventListener("mouseup", onUp);
-}
-
-function toggleConnect() {
-  connecting = !connecting;
-  const btn = document.getElementById("connect-btn");
-  const badge = document.getElementById("connect-badge");
-  btn.classList.toggle("active", connecting);
-  badge.textContent = connecting ? "on" : "off";
-  banner.style.display = connecting ? "block" : "none";
-  if (!connecting) dragLine.style.display = "none";
-}
-
-function addEdge(fromId, toId) {
-  if (edges.find(e=>e.from===fromId&&e.to===toId)) return;
-  if (fromId === toId) return;
-  const e = {id: ++eidC, from: fromId, to: toId};
-  edges.push(e);
-  makeEdgeEl(e);
-  markDirty();
-}
-
-function deleteEdge(eid) {
-  edges = edges.filter(e => e.id !== eid);
-  document.getElementById("ed-"+eid)?.remove();
-  markDirty();
-  setStatus("Connection removed");
+  syncSelection();
 }
 
 /* ── Node CRUD ───────────────────────────────────────────────── */
 window.deleteNode = function(nid) {
   delete nodes[nid];
   document.getElementById("nd-"+nid)?.remove();
-  const rem = edges.filter(e=>e.from===nid||e.to===nid);
-  rem.forEach(e => document.getElementById("ed-"+e.id)?.remove());
+  edges.filter(e=>e.from===nid||e.to===nid).forEach(e=>document.getElementById("ed-"+e.id)?.remove());
   edges = edges.filter(e=>e.from!==nid&&e.to!==nid);
-  syncEmpty();
-  markDirty();
+  selectedNodes.delete(nid);
+  syncEmpty(); markDirty();
 };
 
 window.openEdit = function(nid) {
@@ -1608,25 +1522,16 @@ window.openEdit = function(nid) {
 
 window.confirmEdit = function() {
   const n = nodes[editNodeId];
-  n.name  = document.getElementById("e-name").value.trim() || n.name;
+  n.name  = document.getElementById("e-name").value.trim()  || n.name;
   n.title = document.getElementById("e-title").value.trim();
   n.dept  = document.getElementById("e-dept").value.trim();
   document.getElementById("nd-"+n.id)?.remove();
-  makeNodeEl(n);
-  refreshNodeEdges(n.id);
-  markDirty();
-  closeModal("modal-edit");
+  makeNodeEl(n); refreshNodeEdges(n.id);
+  markDirty(); closeModal("modal-edit");
 };
 
 /* ── Add modal ───────────────────────────────────────────────── */
-window.openAddModal = function(preOrgId, preOrgName) {
-  // If called from an org context (e.g. opened while viewing a specific org),
-  // auto-select that org so the chart saves to the right place.
-  if (preOrgId && preOrgId !== orgId) {
-    orgId   = String(preOrgId);
-    orgName = preOrgName || orgId;
-    document.getElementById("org-picker-label").textContent = orgName;
-  }
+window.openAddModal = function() {
   selectedPerson = null;
   document.getElementById("ps-input").value = "";
   document.getElementById("ps-results").style.display = "none";
@@ -1641,32 +1546,23 @@ window.openAddModal = function(preOrgId, preOrgName) {
 window.addPlaceholder = function() {
   const count = Object.values(nodes).filter(n=>n.placeholder).length+1;
   const n = {
-    id: String(++nidC), name: `Unknown Person ${count}`,
+    id: String(++nidC), name: `Open Position ${count}`,
     title: "", dept: "", placeholder: true, pdPersonId: null,
-    x: 60+Math.random()*280, y: 60+Math.random()*200,
+    x: 80+Math.random()*300, y: 80+Math.random()*200,
   };
-  nodes[n.id] = n;
-  makeNodeEl(n);
-  syncEmpty();
-  markDirty();
+  nodes[n.id] = n; makeNodeEl(n); syncEmpty(); markDirty();
 };
 
 window.confirmAdd = function() {
   if (activeTab === "search") {
     if (!selectedPerson) return;
     const n = {
-      id: String(++nidC),
-      name: selectedPerson.name,
-      title: selectedPerson.title||"",
-      dept: selectedPerson.org_name||"",
-      placeholder: false,
-      pdPersonId: String(selectedPerson.pdId),
-      x: 60+Math.random()*280, y: 60+Math.random()*200,
+      id: String(++nidC), name: selectedPerson.name,
+      title: selectedPerson.title||"", dept: selectedPerson.org_name||"",
+      placeholder: false, pdPersonId: String(selectedPerson.pdId),
+      x: 80+Math.random()*300, y: 80+Math.random()*200,
     };
-    nodes[n.id] = n;
-    makeNodeEl(n);
-    syncEmpty();
-    markDirty();
+    nodes[n.id] = n; makeNodeEl(n); syncEmpty(); markDirty();
   } else {
     const name = document.getElementById("m-name").value.trim();
     if (!name) { document.getElementById("m-name").focus(); return; }
@@ -1675,12 +1571,9 @@ window.confirmAdd = function() {
       title: document.getElementById("m-title").value.trim(),
       dept:  document.getElementById("m-dept").value.trim(),
       placeholder: false, pdPersonId: null,
-      x: 60+Math.random()*280, y: 60+Math.random()*200,
+      x: 80+Math.random()*300, y: 80+Math.random()*200,
     };
-    nodes[n.id] = n;
-    makeNodeEl(n);
-    syncEmpty();
-    markDirty();
+    nodes[n.id] = n; makeNodeEl(n); syncEmpty(); markDirty();
   }
   closeModal("modal-add");
 };
@@ -1700,8 +1593,8 @@ window.onPersonSearch = function(v) {
   clearTimeout(psTimer);
   const el = document.getElementById("ps-results");
   if (!v.trim()) { el.style.display="none"; return; }
-  el.style.display = "block";
-  el.innerHTML = `<div class="sr-msg">Searching…</div>`;
+  el.style.display="block";
+  el.innerHTML=`<div class="sr-msg">Searching…</div>`;
   psTimer = setTimeout(()=>doPsSearch(v), 280);
 };
 
@@ -1709,17 +1602,13 @@ async function doPsSearch(q) {
   const el = document.getElementById("ps-results");
   try {
     const d = await fetch(`/api/orgchart/search?q=${encodeURIComponent(q)}&companyId=${companyId}`).then(r=>r.json());
-    if (!(d.people||[]).length) {
-      el.innerHTML = `<div class="sr-msg">No results for "${q}"</div>`; return;
-    }
+    if (!(d.people||[]).length) { el.innerHTML=`<div class="sr-msg">No results for "${q}"</div>`; return; }
     el.innerHTML = d.people.map(p=>`
       <div class="sr-item" onclick='selectPerson(${JSON.stringify(p).replace(/'/g,"&#39;")})'>
         <div class="sr-av">${initials(p.name)}</div>
         <div><div class="sr-name">${p.name}</div><div class="sr-sub">${p.title||p.org_name||""}</div></div>
       </div>`).join("");
-  } catch(e) {
-    el.innerHTML = `<div class="sr-msg">Search unavailable</div>`;
-  }
+  } catch(e) { el.innerHTML=`<div class="sr-msg">Search unavailable</div>`; }
 }
 
 window.selectPerson = function(p) {
@@ -1734,12 +1623,9 @@ window.dismissConnect = function() {
   setStatus("Running without Pipedrive search");
 };
 
-// Update OAuth link to come back to this panel after auth
-const connectLink = document.getElementById("connect-link");
-if (connectLink) {
-  connectLink.href = `/oauth/start`;
-}
+document.getElementById("connect-link").href = "/oauth/start";
 
+/* ── Org picker ──────────────────────────────────────────────── */
 window.toggleOrgDropdown = function() {
   orgPickerOpen = !orgPickerOpen;
   document.getElementById("org-dropdown").style.display = orgPickerOpen ? "block" : "none";
@@ -1758,7 +1644,7 @@ window.onOrgSearch = function(v) {
   clearTimeout(orgTimer);
   const el = document.getElementById("org-dd-list");
   if (!v.trim()) { el.innerHTML=`<div class="org-dd-empty">Start typing…</div>`; return; }
-  el.innerHTML = `<div class="org-dd-empty">Searching…</div>`;
+  el.innerHTML=`<div class="org-dd-empty">Searching…</div>`;
   orgTimer = setTimeout(()=>doOrgSearch(v), 280);
 };
 
@@ -1767,17 +1653,15 @@ async function doOrgSearch(q) {
   try {
     const d = await fetch(`/api/orgs/search?q=${encodeURIComponent(q)}&companyId=${companyId}`).then(r=>r.json());
     if (!(d.orgs||[]).length) { el.innerHTML=`<div class="org-dd-empty">No results</div>`; return; }
-    el.innerHTML = d.orgs.map(o=>`<div class="org-dd-item" onclick="selectOrg(${o.id},'${o.name.replace(/'/g,"\\'")}')"> ${o.name}</div>`).join("");
+    el.innerHTML = d.orgs.map(o=>`<div class="org-dd-item" onclick="selectOrg(${o.id},'${o.name.replace(/'/g,"\\'")}')">${o.name}</div>`).join("");
   } catch(e) { el.innerHTML=`<div class="org-dd-empty">Error</div>`; }
 }
 
 window.selectOrg = async function(id, name) {
-  orgId   = String(id);
-  orgName = name;
+  orgId = String(id); orgName = name;
   document.getElementById("org-picker-label").textContent = name;
   document.getElementById("org-dropdown").style.display = "none";
   orgPickerOpen = false;
-  // Reset canvas and load saved chart for this org
   nodes = {}; edges = []; nidC = 0; eidC = 0;
   renderAll();
   await loadChart();
@@ -1785,22 +1669,17 @@ window.selectOrg = async function(id, name) {
 
 /* ── Save / Load ─────────────────────────────────────────────── */
 function markDirty() {
-  dirty = true;
-  setStatus("Unsaved changes", true);
+  dirty = true; setStatus("Unsaved changes", true);
   clearTimeout(saveTimer);
   saveTimer = setTimeout(autoSave, 5000);
 }
 
-async function autoSave() {
-  if (dirty) await doSave();
-}
-
+async function autoSave() { if (dirty) await doSave(); }
 window.saveChart = async function() { await doSave(); };
 
 async function doSave() {
   if (!orgId) { setStatus("Select an organisation first"); return; }
-  statusDot.classList.add("warn");
-  setStatus("Saving…");
+  statusDot.classList.add("warn"); setStatus("Saving…");
   try {
     const r = await fetch("/api/orgchart/save", {
       method: "POST",
@@ -1825,11 +1704,10 @@ async function loadChart() {
     const d = await fetch(`/api/orgchart/load?orgId=${orgId}&companyId=${companyId}`).then(r=>r.json());
     if (d.chart) {
       const c = JSON.parse(d.chart);
-      nodes = c.nodes || {}; edges = c.edges || [];
-      nidC  = c.nidC  || 0;  eidC  = c.eidC  || 0;
+      nodes = c.nodes||{}; edges = c.edges||[]; nidC = c.nidC||0; eidC = c.eidC||0;
       if (d.chartName) document.getElementById("chart-name-input").value = d.chartName;
       renderAll();
-      setStatus("Chart loaded");
+      setStatus(`Loaded: ${orgName||orgId}`);
     } else {
       setStatus("No saved chart — start building!");
     }
@@ -1840,46 +1718,44 @@ async function loadChart() {
 window.fitView = function() {
   const ns = Object.values(nodes);
   if (!ns.length) return;
+  const pad = 40;
   const minX = Math.min(...ns.map(n=>n.x));
   const minY = Math.min(...ns.map(n=>n.y));
-  const pad  = 40;
-  ns.forEach(n => {
-    n.x -= minX - pad; n.y -= minY - pad;
-    const el = document.getElementById("nd-"+n.id);
-    if (el) { el.style.left = n.x+"px"; el.style.top = n.y+"px"; }
-  });
-  edges.forEach(e => refreshNodeEdges(e.from));
+  const maxX = Math.max(...ns.map(n=>n.x + nodeW(n)));
+  const maxY = Math.max(...ns.map(n=>n.y + nodeH(n)));
+  const cw = canvasEl.clientWidth, ch = canvasEl.clientHeight;
+  const scaleX = (cw - pad*2) / (maxX - minX);
+  const scaleY = (ch - pad*2) / (maxY - minY);
+  zoom = Math.min(1.0, scaleX, scaleY);
+  panX = pad - minX * zoom;
+  panY = pad - minY * zoom;
+  applyTransform();
 };
 
 /* ── Clear ───────────────────────────────────────────────────── */
 window.clearAll = function() {
   if (!confirm("Clear the entire canvas? This cannot be undone.")) return;
   nodes = {}; edges = []; nidC = 0; eidC = 0;
-  renderAll();
-  markDirty();
+  renderAll(); markDirty();
 };
 
 /* ── Modal helpers ───────────────────────────────────────────── */
 window.closeModal = id => document.getElementById(id).style.display = "none";
-window.overlayClose = (e, id) => { if (e.target.classList.contains("overlay")) closeModal(id); };
+window.overlayClose = (e,id) => { if (e.target.classList.contains("overlay")) closeModal(id); };
 
 /* ── Keyboard ────────────────────────────────────────────────── */
 document.addEventListener("keydown", e=>{
   if (e.key === "Escape") {
-    if (connecting) toggleConnect();
-    if (dragLine.style.display !== "none") {
-      dragLine.style.display = "none";
-      banner.style.display = "none";
-      banner.textContent = "⇄ Drag from a port to connect — Esc to cancel";
-      connSrc = null;
-    }
+    dragLine.style.display = "none";
+    banner.style.display = "none";
+    connSrc = null;
     selectedNodes.clear(); syncSelection();
     clearEdgeSelection();
   }
-  // Delete or Backspace removes all selected nodes (when not in an input)
-  if ((e.key === "Delete" || e.key === "Backspace") && !e.target.matches("input")) {
+  if ((e.key === "Delete" || e.key === "Backspace") && !e.target.matches("input,textarea")) {
+    if (selectedEdgeId != null) { deleteEdge(selectedEdgeId); return; }
     if (selectedNodes.size > 0) {
-      [...selectedNodes].forEach(nid => deleteNode(nid));
+      [...selectedNodes].forEach(nid => window.deleteNode(nid));
       selectedNodes.clear();
     }
   }
