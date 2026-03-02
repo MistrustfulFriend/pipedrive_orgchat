@@ -449,6 +449,25 @@ def person_deals(personId: str = "", companyId: str = ""):
     return {"deals": deals}
 
 
+@app.get("/api/org/by-id")
+def org_by_id(orgId: str = "", companyId: str = ""):
+    """Fetch a single organisation by its Pipedrive ID — used to resolve the name from SDK context."""
+    if not orgId or not companyId:
+        return JSONResponse({"error": "Missing orgId or companyId"}, status_code=400)
+    access_token = get_valid_token(companyId)
+    if not access_token:
+        return JSONResponse({"error": "Not connected"}, status_code=401)
+    headers = {"Authorization": f"Bearer {access_token}"}
+    r = requests.get(
+        f"https://api.pipedrive.com/v1/organizations/{orgId}",
+        headers=headers, timeout=15,
+    )
+    if r.status_code != 200:
+        return {"org": None}
+    data = (r.json().get("data") or {})
+    return {"org": {"id": data.get("id"), "name": data.get("name", "")}}
+
+
 @app.get("/api/orgs/search")
 def orgs_search(q: str = "", companyId: str = ""):
     access_token = get_valid_token(companyId)

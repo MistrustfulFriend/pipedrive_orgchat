@@ -13,24 +13,27 @@
   <link href="https://fonts.googleapis.com/css2?family=DM+Sans:ital,opsz,wght@0,9..40,400;0,9..40,500;0,9..40,600;1,9..40,400&family=DM+Mono:wght@400;500&display=swap" rel="stylesheet" />
   <style>
     :root {
-      --bg:       #f0f2f5;
+      --bg:       #eef0f4;
       --bg2:      #ffffff;
-      --bg3:      #f5f6f8;
-      --bg4:      #eceef1;
-      --border:   #dde1e7;
-      --border2:  #c8cdd6;
+      --bg3:      #f6f7f9;
+      --bg4:      #eceef2;
+      --border:   #e2e5eb;
+      --border2:  #c8cdd8;
       --green:    #1a7f3c;
       --green2:   #166d34;
       --greenDim: rgba(26,127,60,0.10);
-      --blue:     #1864d4;
-      --blueDim:  rgba(24,100,212,0.10);
+      --blue:     #1c64f2;
+      --blueDim:  rgba(28,100,242,0.10);
       --purple:   #7c3aed;
-      --text:     #111827;
-      --text2:    #4b5563;
-      --text3:    #9ca3af;
-      --red:      #dc2626;
+      --text:     #0f172a;
+      --text2:    #475569;
+      --text3:    #94a3b8;
+      --red:      #e02424;
       --yellow:   #d97706;
-      --radius:   8px;
+      --shadow:   0 1px 3px rgba(0,0,0,.07), 0 4px 16px rgba(0,0,0,.05);
+      --shadow-md:0 4px 12px rgba(0,0,0,.10), 0 1px 3px rgba(0,0,0,.06);
+      --shadow-lg:0 8px 32px rgba(0,0,0,.14), 0 2px 6px rgba(0,0,0,.08);
+      --radius:   9px;
       --font:     'DM Sans', system-ui, sans-serif;
       --mono:     'DM Mono', monospace;
     }
@@ -51,12 +54,13 @@
     #toolbar {
       display: flex;
       align-items: center;
-      gap: 6px;
-      padding: 8px 12px;
+      gap: 5px;
+      padding: 7px 14px;
       background: var(--bg2);
       border-bottom: 1px solid var(--border);
       flex-shrink: 0;
       z-index: 20;
+      box-shadow: 0 1px 0 var(--border);
     }
     .tl-brand {
       display: flex;
@@ -163,13 +167,14 @@
 
     /* ─── Sidebar ──────────────────────────────────────────── */
     #sidebar {
-      width: 220px;
+      width: 210px;
       flex-shrink: 0;
       background: var(--bg2);
       border-right: 1px solid var(--border);
       display: flex;
       flex-direction: column;
-      overflow: hidden;
+      overflow-y: auto;
+      overflow-x: hidden;
     }
     .sb-section {
       padding: 10px 10px 4px;
@@ -246,9 +251,9 @@
       flex: 1;
       position: relative;
       overflow: hidden;
-      background: #f0f2f5;
-      background-image: radial-gradient(circle, #c8cdd6 1px, transparent 1px);
-      background-size: 24px 24px;
+      background-color: #eef0f4;
+      background-image: radial-gradient(circle, #d1d5de 1.2px, transparent 1.2px);
+      background-size: 28px 28px;
     }
 
     #svg-layer {
@@ -273,34 +278,36 @@
     /* ─── Nodes ────────────────────────────────────────────── */
     .node {
       position: absolute;
-      width: 190px;
+      width: 200px;
       background: var(--bg2);
       border: 1px solid var(--border);
-      border-radius: var(--radius);
+      border-radius: 11px;
       cursor: grab;
       user-select: none;
-      transition: border-color .15s, box-shadow .15s;
-      box-shadow: 0 1px 4px rgba(0,0,0,.08), 0 2px 12px rgba(0,0,0,.05);
+      transition: border-color .15s, box-shadow .15s, transform .1s;
+      box-shadow: var(--shadow);
     }
-    .node:hover { border-color: var(--border2); box-shadow: 0 4px 16px rgba(0,0,0,.12); z-index: 10; }
-    .node.selected { border-color: var(--blue); box-shadow: 0 0 0 3px var(--blueDim); }
-    .node.dragging { cursor: grabbing; opacity: .95; z-index: 50; box-shadow: 0 8px 28px rgba(0,0,0,.18); }
-    .node.placeholder-node { border-style: dashed; border-color: rgba(124,58,237,0.35); }
+    .node:hover { border-color: var(--border2); box-shadow: var(--shadow-md); z-index: 10; }
+    .node.selected { border-color: var(--blue); box-shadow: 0 0 0 3px var(--blueDim), var(--shadow-md); }
+    .node.dragging { cursor: grabbing; z-index: 50; box-shadow: var(--shadow-lg); transform: scale(1.02); }
+    .node.placeholder-node { border-style: dashed; border-color: rgba(124,58,237,0.4); background: rgba(124,58,237,0.02); }
     .node.placeholder-node:hover { border-color: var(--purple); }
 
     .node-header {
       display: flex;
       align-items: center;
       gap: 6px;
-      padding: 7px 8px 6px;
+      padding: 7px 10px 6px;
       border-bottom: 1px solid var(--border);
+      border-radius: 11px 11px 0 0;
+      background: var(--bg3);
     }
     .node-dept-tag {
       flex: 1;
       font-size: 9px;
       font-weight: 600;
       text-transform: uppercase;
-      letter-spacing: 0.08em;
+      letter-spacing: 0.07em;
       color: var(--text3);
       font-family: var(--mono);
       white-space: nowrap;
@@ -310,7 +317,7 @@
     .node-type-icon {
       width: 16px; height: 16px;
       flex-shrink: 0;
-      border-radius: 3px;
+      border-radius: 4px;
       display: flex; align-items: center; justify-content: center;
     }
     .node-type-icon svg { width: 10px; height: 10px; stroke: currentColor; fill: none; stroke-width: 2; stroke-linecap: round; stroke-linejoin: round; }
@@ -318,31 +325,35 @@
     .node-type-icon.unlinked { background: rgba(188,140,255,0.1); color: var(--purple); }
 
     .node-body {
-      padding: 9px 10px 10px;
+      padding: 10px 12px 11px;
+      display: flex;
+      align-items: center;
+      gap: 10px;
     }
     .node-avatar {
-      width: 32px; height: 32px;
+      width: 36px; height: 36px;
       border-radius: 50%;
-      background: var(--blueDim);
-      border: 1px solid rgba(24,100,212,0.2);
+      background: linear-gradient(135deg, #dbeafe 0%, #bfdbfe 100%);
+      border: 1.5px solid rgba(28,100,242,0.18);
       display: flex; align-items: center; justify-content: center;
-      font-size: 11px;
-      font-weight: 600;
+      font-size: 12px;
+      font-weight: 700;
       color: var(--blue);
-      margin-bottom: 7px;
-      letter-spacing: 0.03em;
+      flex-shrink: 0;
+      letter-spacing: 0.02em;
     }
     .node-avatar.ghost {
-      background: rgba(124,58,237,0.08);
-      border: 1px dashed rgba(124,58,237,0.4);
+      background: linear-gradient(135deg, #ede9fe 0%, #ddd6fe 100%);
+      border: 1.5px dashed rgba(124,58,237,0.4);
       color: var(--purple);
-      font-size: 14px;
+      font-size: 15px;
     }
+    .node-info { flex: 1; min-width: 0; }
     .node-name {
       font-size: 12px;
       font-weight: 600;
       color: var(--text);
-      line-height: 1.35;
+      line-height: 1.3;
       margin-bottom: 2px;
       overflow: hidden;
       text-overflow: ellipsis;
@@ -351,34 +362,35 @@
     .node-title {
       font-size: 11px;
       color: var(--text2);
-      line-height: 1.35;
+      line-height: 1.3;
       overflow: hidden;
       text-overflow: ellipsis;
       white-space: nowrap;
     }
 
-    .node-hover-actions {
+    .node-actions {
       position: absolute;
-      top: 5px; right: 5px;
-      display: flex; gap: 3px;
+      top: 6px; right: 6px;
+      display: flex; gap: 2px;
       opacity: 0;
       transition: opacity .15s;
+      pointer-events: none;
     }
-    .node:hover .node-hover-actions { opacity: 1; }
+    .node:hover .node-actions { opacity: 1; pointer-events: all; }
     .nha-btn {
-      width: 20px; height: 20px;
+      width: 22px; height: 22px;
       border: 1px solid var(--border);
-      border-radius: 4px;
+      border-radius: 5px;
       background: var(--bg2);
       color: var(--text3);
       cursor: pointer;
       display: flex; align-items: center; justify-content: center;
       transition: all .12s;
-      box-shadow: 0 1px 3px rgba(0,0,0,.08);
+      box-shadow: var(--shadow);
     }
-    .nha-btn:hover { background: var(--bg3); color: var(--text); border-color: var(--border2); }
-    .nha-btn.del:hover { color: var(--red); border-color: var(--red); background: #fef2f2; }
-    .nha-btn svg { width: 10px; height: 10px; stroke: currentColor; fill: none; stroke-width: 2; stroke-linecap: round; stroke-linejoin: round; }
+    .nha-btn:hover { background: var(--bg4); color: var(--text2); border-color: var(--border2); }
+    .nha-btn.del:hover { color: var(--red); border-color: rgba(224,36,36,0.3); background: #fef2f2; }
+    .nha-btn svg { width: 11px; height: 11px; stroke: currentColor; fill: none; stroke-width: 2; stroke-linecap: round; stroke-linejoin: round; }
 
     /* ─── Connection ports ─────────────────────────────────── */
     .port {
@@ -402,11 +414,11 @@
     /* ─── Edges ────────────────────────────────────────────── */
     .edge-path {
       fill: none;
-      stroke: #94a3b8;
+      stroke: #b0bac8;
       stroke-width: 2;
       cursor: pointer;
-      transition: stroke .15s;
-      pointer-events: none; /* hit area handles events */
+      transition: stroke .18s;
+      pointer-events: none;
     }
     .edge-hit {
       fill: none;
@@ -465,19 +477,20 @@
     /* ─── Connect modal ────────────────────────────────────── */
     #connect-banner {
       position: absolute;
-      bottom: 14px;
+      bottom: 20px;
       left: 50%;
       transform: translateX(-50%);
-      background: white;
-      border: 1px solid var(--blue);
+      background: rgba(15,23,42,0.85);
+      backdrop-filter: blur(8px);
+      -webkit-backdrop-filter: blur(8px);
       border-radius: 20px;
-      padding: 6px 16px;
-      font-size: 12px;
-      color: var(--blue);
+      padding: 7px 18px;
+      font-size: 11.5px;
+      color: #fff;
       font-weight: 500;
       display: none;
       z-index: 30;
-      box-shadow: 0 4px 16px rgba(24,100,212,0.15);
+      box-shadow: var(--shadow-md);
       pointer-events: none;
       white-space: nowrap;
     }
@@ -667,34 +680,36 @@
     /* ─── Zoom controls ────────────────────────────────────────── */
     #zoom-controls {
       position: absolute;
-      bottom: 14px;
-      right: 14px;
+      bottom: 20px;
+      right: 20px;
       display: flex;
       flex-direction: column;
-      gap: 3px;
+      align-items: center;
+      gap: 1px;
+      background: var(--bg2);
+      border: 1px solid var(--border);
+      border-radius: 10px;
+      padding: 3px;
+      box-shadow: var(--shadow-md);
       z-index: 25;
     }
     .zoom-btn {
-      width: 30px; height: 30px;
-      background: var(--bg2);
-      border: 1px solid var(--border);
-      border-radius: 6px;
+      width: 28px; height: 28px;
+      background: none;
+      border: none;
+      border-radius: 7px;
       display: flex; align-items: center; justify-content: center;
       cursor: pointer;
-      font-size: 16px;
-      font-weight: 600;
+      font-size: 18px;
+      font-weight: 300;
       color: var(--text2);
-      box-shadow: 0 1px 4px rgba(0,0,0,.1);
       transition: all .12s;
       line-height: 1;
       user-select: none;
     }
-    .zoom-btn:hover { background: var(--bg4); color: var(--text); border-color: var(--border2); }
+    .zoom-btn:hover { background: var(--bg4); color: var(--text); }
     #zoom-label {
-      width: 30px; height: 22px;
-      background: var(--bg3);
-      border: 1px solid var(--border);
-      border-radius: 5px;
+      width: 28px; height: 18px;
       display: flex; align-items: center; justify-content: center;
       font-size: 9px; font-weight: 600; font-family: var(--mono);
       color: var(--text3);
@@ -955,7 +970,7 @@
     <svg id="svg-layer" xmlns="http://www.w3.org/2000/svg">
       <defs>
         <marker id="arr" markerWidth="8" markerHeight="6" refX="7" refY="3" orient="auto">
-          <polygon points="0 0, 8 3, 0 6" fill="#94a3b8"/>
+          <polygon points="0 0, 8 3, 0 6" fill="#b0bac8"/>
         </marker>
         <marker id="arr-blue" markerWidth="8" markerHeight="6" refX="7" refY="3" orient="auto">
           <polygon points="0 0, 8 3, 0 6" fill="#1864d4"/>
@@ -1099,13 +1114,13 @@ try {
     companyId = String(ctx.companyId || "");
   }
 
-  // org record the panel was opened on
+  // org record the panel was opened on — Pipedrive SDK context.data
+  // For an organisation panel: data = { id: 1, ... }
   const data = ctx.data || {};
-  // Pipedrive uses "id" as the numeric record ID
   if (data.id) orgId = String(data.id);
-  // Name is "name" for organisations (vs "title" for deals/activities)
-  if (data.name)  orgName = String(data.name);
-  else if (data.title) orgName = String(data.title);
+  if (data.name)        orgName = String(data.name);
+  else if (data.title)  orgName = String(data.title);
+  // If we got an orgId but no name, we'll fetch the name after auth check below
 
 } catch(e) {
   console.warn("SDK init failed:", e);
@@ -1190,9 +1205,14 @@ canvasEl.addEventListener("wheel", e => {
 applyTransform();
 
 /* ── Load org from context ───────────────────────────────────── */
-// orgId is set only when SDK getContext() returned a valid organisation record.
-// orgName is always populated alongside it. Show name in picker, load chart.
 if (orgId) {
+  // If SDK gave us the ID but not the name (common in Pipedrive), fetch it
+  if (!orgName && companyId) {
+    try {
+      const r = await fetch(`/api/org/by-id?orgId=${orgId}&companyId=${companyId}`).then(x=>x.json());
+      if (r.org && r.org.name) orgName = r.org.name;
+    } catch(e) {}
+  }
   document.getElementById("org-picker-label").textContent = orgName || `Org #${orgId}`;
   await loadChart();
 }
@@ -1224,13 +1244,9 @@ function makeNodeEl(n) {
   el.id = "nd-"+n.id;
   el.style.cssText = `left:${n.x}px;top:${n.y}px`;
 
-  const deptColor = n.placeholder
-    ? "rgba(124,58,237,0.08);color:rgba(124,58,237,0.7)"
-    : "rgba(24,100,212,0.08);color:rgba(24,100,212,0.8)";
-
   el.innerHTML = `
     <div class="node-header">
-      <span class="node-dept-tag" style="background:${deptColor}">${n.dept||"—"}</span>
+      <span class="node-dept-tag">${n.dept||"—"}</span>
       <div class="node-type-icon ${n.pdPersonId?'linked':'unlinked'}">
         ${n.pdPersonId
           ? `<svg viewBox="0 0 24 24"><polyline points="20 6 9 17 4 12"/></svg>`
@@ -1239,10 +1255,12 @@ function makeNodeEl(n) {
     </div>
     <div class="node-body">
       <div class="node-avatar ${n.placeholder?'ghost':''}">${n.placeholder?"?":initials(n.name)}</div>
-      <div class="node-name">${n.name||"Unknown"}</div>
-      <div class="node-title">${n.title||""}</div>
+      <div class="node-info">
+        <div class="node-name">${n.name||"Unknown"}</div>
+        <div class="node-title">${n.title||""}</div>
+      </div>
     </div>
-    <div class="node-hover-actions">
+    <div class="node-actions">
       <button class="nha-btn" title="Edit" onclick="openEdit('${n.id}')">
         <svg viewBox="0 0 24 24"><path d="M11 4H4a2 2 0 00-2 2v14a2 2 0 002 2h14a2 2 0 002-2v-7"/><path d="M18.5 2.5a2.121 2.121 0 013 3L12 15l-4 1 1-4z"/></svg>
       </button>
@@ -1261,8 +1279,8 @@ function makeNodeEl(n) {
   nodesEl.appendChild(el);
 }
 
-function nodeW(n) { return document.getElementById("nd-"+n.id)?.offsetWidth  || 190; }
-function nodeH(n) { return document.getElementById("nd-"+n.id)?.offsetHeight || 110; }
+function nodeW(n) { return document.getElementById("nd-"+n.id)?.offsetWidth  || 200; }
+function nodeH(n) { return document.getElementById("nd-"+n.id)?.offsetHeight || 100; }
 
 /* ── Edge elements ───────────────────────────────────────────── */
 function edgePath(f, t) {
