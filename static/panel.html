@@ -888,85 +888,80 @@
 <script>
 (async () => {
 
-  /* ── SDK + Params (REVISED) ─────────────────────────────────────────────── */
-  const _p = new URLSearchParams(location.search);
+/* ── SDK + Params ─────────────────────────────────────────────── */
+// Always read URL params first as reliable fallback
+const _p    = new URLSearchParams(location.search);
+let companyId = _p.get("companyId") || "";
+let orgId     = _p.get("id")        || "";
+let orgName   = _p.get("name")      || "";
+let sdk       = null;
 
-  // Pipedrive often passes these directly in the iframe query
-  let companyId = _p.get("companyId") || "";
-  let orgId     = _p.get("orgId") || _p.get("org_id") || "";
-  let orgName   = _p.get("name")  || "";
-
-  let sdk = null;
-
-  // Try to initialize SDK ONLY when inside iframe (Pipedrive)
-  try {
-    const isIframe = window.self !== window.top;
-    if (isIframe) {
-      // Per Pipedrive SDK docs: the runtime `id` comes in the iframe query,
-      // and the SDK will read it automatically unless you redirect/modify URL.
-      sdk = await AppExtensionsSDK.initialize();
-
-      // Try to enrich context from sdk
-      // (Different extension locations expose different metadata)
-      const u = sdk.userIdentifier || {};
-      if (!companyId && u.companyId) companyId = String(u.companyId);
-
-      // For some entrypoints, u.id may NOT be organisation id.
-      // We'll only use it as orgId if orgId is still empty.
-      if (!orgId && u.id) orgId = String(u.id);
-      if (!orgName && u.name) orgName = String(u.name);
-    }
-  } catch (e) {
-    sdk = null;
-    console.warn("SDK init failed:", e);
-
-    // Surface something visible so you don't just see "Something went wrong"
-    const cs = document.getElementById("connect-screen");
-    if (cs) {
-      cs.classList.add("show");
-      const msg = document.getElementById("connect-msg");
-      if (msg) msg.textContent = "Pipedrive SDK init failed. Open DevTools Console for details.";
-    }
+// Only attempt SDK init if we look like we're inside Pipedrive
+// (i.e. loaded in an iframe with a parent origin)
+try {
+  const isIframe = window.self !== window.top;
+  if (isIframe) {
+    // Timeout wrapper — SDK can hang indefinitely if not in Pipedrive
+    sdk = await Promise.race([
+      AppExtensionsSDK.initialize({ identifier: "ce57ff29-4b39-42a7-9868-f10a99f5d8a9" }),
+      new Promise((_, rej) => setTimeout(() => rej(new Error("SDK timeout")), 3000))
+    ]);
+    const u = sdk.userIdentifier || {};
+    // SDK values take priority over URL params
+    if (u.companyId) companyId = String(u.companyId);
+    if (u.id)        orgId     = String(u.id);
+    if (u.name)      orgName   = String(u.name);
   }
+} catch(e) {
+  // SDK failed or timed out — URL params are our source of truth
+  // This is fine: direct /panel?companyId=X access works without SDK
+  sdk = null;
+}
 
-  /* ── Auth check ──────────────────────────────────────────────── */
-  if (!companyId) {
+/* ── Auth check ──────────────────────────────────────────────── */
+// Show connect screen if no companyId (standalone, not yet authed)
+// or if companyId is present but token is missing/expired
+if (!companyId) {
+  document.getElementById("connect-screen").classList.add("show");
+  // Don't return — still let the canvas work for demo/manual use
+} else {
+  const s = await fetch(`/api/status?companyId=${companyId}`)
+    .then(r => r.json())
+    .catch(() => ({ connected: false }));
+  if (!s.connected) {
     document.getElementById("connect-screen").classList.add("show");
-  } else {
-    const s = await fetch(`/api/status?companyId=${encodeURIComponent(companyId)}`)
-      .then(r => r.json())
-      .catch(() => ({ connected: false }));
-    if (!s.connected) document.getElementById("connect-screen").classList.add("show");
+    // Don't return — user might just need to re-auth
   }
+}
 
-  /* ── State (UNCHANGED) ───────────────────────────────────── */
-  let nodes   = {};
-  let edges   = [];
-  let nidC    = 0;
-  let eidC    = 0;
-  let connecting  = false;
-  let connSrc     = null;
-  let selectedPerson = null;
-  let editNodeId  = null;
-  let activeTab   = "search";
-  let dirty       = false;
-  let saveTimer   = null;
-  let orgPickerOpen = false;
+/* ── State ───────────────────────────────────────────────────── */
+let nodes   = {};  // id → {id, name, title, dept, pdPersonId, placeholder, x, y}
+let edges   = [];  // [{id, from, to}]
+let nidC    = 0;
+let eidC    = 0;
+let connecting  = false;
+let connSrc     = null;
+let selectedPerson = null;
+let editNodeId  = null;
+let activeTab   = "search";
+let dirty       = false;
+let saveTimer   = null;
+let orgPickerOpen = false;
 
-  const canvasEl   = document.getElementById("canvas-wrap");
-  const nodesEl    = document.getElementById("nodes-layer");
-  const edgesEl    = document.getElementById("edges-g");
-  const dragLine   = document.getElementById("drag-line");
-  const emptyEl    = document.getElementById("empty-state");
-  const banner     = document.getElementById("connect-banner");
-  const statusTxt  = document.getElementById("status-text");
-  const statusDot  = document.getElementById("status-dot");
+const canvasEl   = document.getElementById("canvas-wrap");
+const nodesEl    = document.getElementById("nodes-layer");
+const edgesEl    = document.getElementById("edges-g");
+const dragLine   = document.getElementById("drag-line");
+const emptyEl    = document.getElementById("empty-state");
+const banner     = document.getElementById("connect-banner");
+const statusTxt  = document.getElementById("status-text");
+const statusDot  = document.getElementById("status-dot");
 
-  /* ── Prefill org if passed via params ────────────────────────── */
-  if (orgId && orgName) {
-    document.getElementById("org-picker-label").textContent = orgName;
-    await loadChart();
-  }
+/* ── Prefill org if passed via params ────────────────────────── */
+if (orgId && orgName) {
+  document.getElementById("org-picker-label").textContent = orgName;
+  await loadChart();
+}
 
 /* ── Render ──────────────────────────────────────────────────── */
 function renderAll() {
