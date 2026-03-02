@@ -1,0 +1,1370 @@
+<!doctype html>
+<html lang="en">
+<head>
+  <meta charset="utf-8" />
+  <title>Org Chart Builder</title>
+  <meta name="viewport" content="width=device-width, initial-scale=1" />
+  <script src="https://cdn.jsdelivr.net/npm/@pipedrive/app-extensions-sdk@0/dist/index.umd.js"></script>
+  <link rel="preconnect" href="https://fonts.googleapis.com" />
+  <link href="https://fonts.googleapis.com/css2?family=DM+Sans:ital,opsz,wght@0,9..40,400;0,9..40,500;0,9..40,600;1,9..40,400&family=DM+Mono:wght@400;500&display=swap" rel="stylesheet" />
+  <style>
+    :root {
+      --bg:       #0d1117;
+      --bg2:      #161b22;
+      --bg3:      #1c2332;
+      --bg4:      #21262d;
+      --border:   #30363d;
+      --border2:  #3d444d;
+      --green:    #3fb950;
+      --green2:   #2ea043;
+      --greenDim: rgba(63,185,80,0.15);
+      --blue:     #58a6ff;
+      --blueDim:  rgba(88,166,255,0.12);
+      --purple:   #bc8cff;
+      --text:     #e6edf3;
+      --text2:    #8b949e;
+      --text3:    #484f58;
+      --red:      #f85149;
+      --yellow:   #d29922;
+      --radius:   8px;
+      --font:     'DM Sans', system-ui, sans-serif;
+      --mono:     'DM Mono', monospace;
+    }
+    *, *::before, *::after { box-sizing: border-box; margin: 0; padding: 0; }
+
+    body {
+      font-family: var(--font);
+      background: var(--bg);
+      color: var(--text);
+      height: 100vh;
+      display: flex;
+      flex-direction: column;
+      overflow: hidden;
+      -webkit-font-smoothing: antialiased;
+    }
+
+    /* ─── Toolbar ─────────────────────────────────────────── */
+    #toolbar {
+      display: flex;
+      align-items: center;
+      gap: 6px;
+      padding: 8px 12px;
+      background: var(--bg2);
+      border-bottom: 1px solid var(--border);
+      flex-shrink: 0;
+      z-index: 20;
+    }
+    .tl-brand {
+      display: flex;
+      align-items: center;
+      gap: 8px;
+      padding-right: 8px;
+      border-right: 1px solid var(--border);
+      margin-right: 2px;
+    }
+    .tl-brand-icon {
+      width: 28px; height: 28px;
+      border-radius: 6px;
+      background: var(--greenDim);
+      border: 1px solid rgba(63,185,80,0.3);
+      display: flex; align-items: center; justify-content: center;
+    }
+    .tl-brand-icon svg { width: 15px; height: 15px; stroke: var(--green); fill: none; stroke-width: 2; stroke-linecap: round; stroke-linejoin: round; }
+    .tl-brand-name { font-size: 13px; font-weight: 600; letter-spacing: -0.02em; }
+
+    .tl-sep { width: 1px; height: 18px; background: var(--border); margin: 0 2px; }
+
+    .tl-org-picker {
+      display: flex;
+      align-items: center;
+      gap: 6px;
+      padding: 5px 10px;
+      background: var(--bg3);
+      border: 1px solid var(--border);
+      border-radius: var(--radius);
+      cursor: pointer;
+      font-size: 12px;
+      font-weight: 500;
+      color: var(--text2);
+      transition: all 0.15s;
+      min-width: 160px;
+      max-width: 220px;
+    }
+    .tl-org-picker:hover { border-color: var(--border2); color: var(--text); }
+    .tl-org-picker svg { width: 12px; height: 12px; stroke: currentColor; fill: none; stroke-width: 2; stroke-linecap: round; stroke-linejoin: round; flex-shrink: 0; }
+    .tl-org-name { flex: 1; overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
+
+    .tl-chart-name {
+      font-size: 12px;
+      font-weight: 500;
+      color: var(--text2);
+      background: none;
+      border: 1px solid transparent;
+      border-radius: 5px;
+      padding: 4px 8px;
+      font-family: var(--font);
+      outline: none;
+      transition: all 0.15s;
+      min-width: 120px;
+    }
+    .tl-chart-name:hover { border-color: var(--border); }
+    .tl-chart-name:focus { border-color: var(--blue); color: var(--text); background: var(--bg3); }
+
+    .tl-btn {
+      display: flex; align-items: center; gap: 5px;
+      padding: 5px 10px;
+      border: 1px solid var(--border);
+      border-radius: var(--radius);
+      background: var(--bg3);
+      color: var(--text2);
+      font-family: var(--font);
+      font-size: 12px;
+      font-weight: 500;
+      cursor: pointer;
+      white-space: nowrap;
+      transition: all 0.15s;
+      line-height: 1;
+    }
+    .tl-btn svg { width: 12px; height: 12px; stroke: currentColor; fill: none; stroke-width: 2; stroke-linecap: round; stroke-linejoin: round; flex-shrink: 0; }
+    .tl-btn:hover { border-color: var(--border2); color: var(--text); background: var(--bg4); }
+    .tl-btn.active { background: var(--greenDim); border-color: rgba(63,185,80,0.4); color: var(--green); }
+    .tl-btn.primary { background: var(--green2); border-color: var(--green2); color: #fff; font-weight: 600; }
+    .tl-btn.primary:hover { background: var(--green); border-color: var(--green); }
+    .tl-btn:disabled { opacity: 0.4; cursor: not-allowed; }
+
+    .tl-spacer { flex: 1; }
+
+    .tl-status {
+      font-size: 11px;
+      color: var(--text3);
+      font-family: var(--mono);
+      display: flex;
+      align-items: center;
+      gap: 5px;
+    }
+    .tl-status-dot {
+      width: 6px; height: 6px;
+      border-radius: 50%;
+      background: var(--green);
+    }
+    .tl-status-dot.warn { background: var(--yellow); animation: blink 1.2s infinite; }
+    @keyframes blink { 0%,100%{opacity:1} 50%{opacity:.3} }
+
+    /* ─── Main layout ──────────────────────────────────────── */
+    #main {
+      display: flex;
+      flex: 1;
+      overflow: hidden;
+    }
+
+    /* ─── Sidebar ──────────────────────────────────────────── */
+    #sidebar {
+      width: 220px;
+      flex-shrink: 0;
+      background: var(--bg2);
+      border-right: 1px solid var(--border);
+      display: flex;
+      flex-direction: column;
+      overflow: hidden;
+    }
+    .sb-section {
+      padding: 10px 10px 4px;
+      font-size: 10px;
+      font-weight: 600;
+      text-transform: uppercase;
+      letter-spacing: 0.08em;
+      color: var(--text3);
+      font-family: var(--mono);
+    }
+    .sb-btn {
+      display: flex;
+      align-items: center;
+      gap: 8px;
+      padding: 7px 10px;
+      font-size: 12px;
+      font-weight: 500;
+      color: var(--text2);
+      cursor: pointer;
+      border: none;
+      background: none;
+      font-family: var(--font);
+      width: 100%;
+      text-align: left;
+      border-radius: 5px;
+      margin: 1px 4px;
+      width: calc(100% - 8px);
+      transition: all 0.12s;
+    }
+    .sb-btn:hover { background: var(--bg4); color: var(--text); }
+    .sb-btn svg { width: 13px; height: 13px; stroke: currentColor; fill: none; stroke-width: 2; stroke-linecap: round; stroke-linejoin: round; flex-shrink: 0; }
+    .sb-btn .sb-badge {
+      margin-left: auto;
+      font-size: 9px;
+      font-family: var(--mono);
+      padding: 1px 5px;
+      border-radius: 3px;
+      background: var(--bg4);
+      color: var(--text3);
+      border: 1px solid var(--border);
+    }
+
+    .sb-divider { height: 1px; background: var(--border); margin: 6px 0; }
+
+    /* Node palette */
+    .palette-node {
+      margin: 4px 8px;
+      padding: 8px 10px;
+      background: var(--bg3);
+      border: 1px solid var(--border);
+      border-radius: var(--radius);
+      cursor: grab;
+      transition: all 0.15s;
+      display: flex;
+      align-items: center;
+      gap: 8px;
+    }
+    .palette-node:hover { border-color: var(--border2); background: var(--bg4); }
+    .palette-node:active { cursor: grabbing; }
+    .palette-icon {
+      width: 28px; height: 28px;
+      border-radius: 6px;
+      display: flex; align-items: center; justify-content: center;
+      flex-shrink: 0;
+    }
+    .palette-icon svg { width: 14px; height: 14px; stroke: currentColor; fill: none; stroke-width: 2; stroke-linecap: round; stroke-linejoin: round; }
+    .palette-icon.person { background: var(--blueDim); color: var(--blue); border: 1px solid rgba(88,166,255,0.2); }
+    .palette-icon.placeholder { background: rgba(188,140,255,0.1); color: var(--purple); border: 1px dashed rgba(188,140,255,0.3); }
+    .palette-label { font-size: 12px; font-weight: 500; color: var(--text2); }
+    .palette-sublabel { font-size: 10px; color: var(--text3); }
+
+    /* ─── Canvas ───────────────────────────────────────────── */
+    #canvas-wrap {
+      flex: 1;
+      position: relative;
+      overflow: hidden;
+      background: var(--bg);
+      background-image:
+        radial-gradient(circle, var(--border) 1px, transparent 1px);
+      background-size: 24px 24px;
+    }
+
+    #svg-layer {
+      position: absolute;
+      inset: 0;
+      width: 100%; height: 100%;
+      pointer-events: none;
+      z-index: 1;
+    }
+    #nodes-layer {
+      position: absolute;
+      inset: 0;
+      z-index: 2;
+    }
+
+    /* ─── Nodes ────────────────────────────────────────────── */
+    .node {
+      position: absolute;
+      width: 190px;
+      background: var(--bg2);
+      border: 1px solid var(--border);
+      border-radius: var(--radius);
+      cursor: grab;
+      user-select: none;
+      transition: border-color .15s, box-shadow .15s;
+      box-shadow: 0 2px 12px rgba(0,0,0,.5);
+    }
+    .node:hover { border-color: var(--border2); box-shadow: 0 4px 20px rgba(0,0,0,.6); z-index: 10; }
+    .node.selected { border-color: var(--blue); box-shadow: 0 0 0 3px var(--blueDim); }
+    .node.dragging { cursor: grabbing; opacity: .9; z-index: 50; box-shadow: 0 8px 32px rgba(0,0,0,.7); }
+    .node.placeholder-node { border-style: dashed; border-color: rgba(188,140,255,0.4); }
+    .node.placeholder-node:hover { border-color: var(--purple); }
+
+    .node-header {
+      display: flex;
+      align-items: center;
+      gap: 6px;
+      padding: 7px 8px 6px;
+      border-bottom: 1px solid var(--border);
+    }
+    .node-dept-tag {
+      flex: 1;
+      font-size: 9px;
+      font-weight: 600;
+      text-transform: uppercase;
+      letter-spacing: 0.08em;
+      color: var(--text3);
+      font-family: var(--mono);
+      white-space: nowrap;
+      overflow: hidden;
+      text-overflow: ellipsis;
+    }
+    .node-type-icon {
+      width: 16px; height: 16px;
+      flex-shrink: 0;
+      border-radius: 3px;
+      display: flex; align-items: center; justify-content: center;
+    }
+    .node-type-icon svg { width: 10px; height: 10px; stroke: currentColor; fill: none; stroke-width: 2; stroke-linecap: round; stroke-linejoin: round; }
+    .node-type-icon.linked { background: var(--greenDim); color: var(--green); }
+    .node-type-icon.unlinked { background: rgba(188,140,255,0.1); color: var(--purple); }
+
+    .node-body {
+      padding: 9px 10px 10px;
+    }
+    .node-avatar {
+      width: 32px; height: 32px;
+      border-radius: 50%;
+      background: var(--bg4);
+      border: 1px solid var(--border);
+      display: flex; align-items: center; justify-content: center;
+      font-size: 11px;
+      font-weight: 600;
+      color: var(--text2);
+      margin-bottom: 7px;
+      letter-spacing: 0.03em;
+    }
+    .node-avatar.ghost {
+      background: transparent;
+      border: 1px dashed rgba(188,140,255,0.35);
+      color: var(--purple);
+      font-size: 14px;
+    }
+    .node-name {
+      font-size: 12px;
+      font-weight: 600;
+      color: var(--text);
+      line-height: 1.35;
+      margin-bottom: 2px;
+      overflow: hidden;
+      text-overflow: ellipsis;
+      white-space: nowrap;
+    }
+    .node-title {
+      font-size: 11px;
+      color: var(--text2);
+      line-height: 1.35;
+      overflow: hidden;
+      text-overflow: ellipsis;
+      white-space: nowrap;
+    }
+
+    .node-hover-actions {
+      position: absolute;
+      top: 5px; right: 5px;
+      display: flex; gap: 3px;
+      opacity: 0;
+      transition: opacity .15s;
+    }
+    .node:hover .node-hover-actions { opacity: 1; }
+    .nha-btn {
+      width: 20px; height: 20px;
+      border: 1px solid var(--border);
+      border-radius: 4px;
+      background: var(--bg3);
+      color: var(--text3);
+      cursor: pointer;
+      display: flex; align-items: center; justify-content: center;
+      transition: all .12s;
+    }
+    .nha-btn:hover { background: var(--bg4); color: var(--text); border-color: var(--border2); }
+    .nha-btn.del:hover { color: var(--red); border-color: var(--red); }
+    .nha-btn svg { width: 10px; height: 10px; stroke: currentColor; fill: none; stroke-width: 2; stroke-linecap: round; stroke-linejoin: round; }
+
+    /* ─── Connection ports ─────────────────────────────────── */
+    .port {
+      position: absolute;
+      width: 10px; height: 10px;
+      border-radius: 50%;
+      background: var(--bg2);
+      border: 2px solid var(--blue);
+      cursor: crosshair;
+      opacity: 0;
+      transition: opacity .15s, transform .15s;
+      z-index: 5;
+    }
+    .node:hover .port { opacity: 1; }
+    .port:hover { transform: scale(1.4); background: var(--blue); }
+    .port.port-bottom { bottom: -6px; left: calc(50% - 5px); }
+    .port.port-top    { top: -6px;    left: calc(50% - 5px); }
+
+    /* ─── Edges ────────────────────────────────────────────── */
+    .edge-path {
+      fill: none;
+      stroke: var(--border2);
+      stroke-width: 1.5;
+      cursor: pointer;
+      transition: stroke .15s;
+    }
+    .edge-path:hover { stroke: var(--red); }
+    .edge-path:hover + .edge-del { opacity: 1; }
+
+    #drag-line {
+      fill: none;
+      stroke: var(--blue);
+      stroke-width: 1.5;
+      stroke-dasharray: 6 3;
+      display: none;
+    }
+
+    /* ─── Empty state ──────────────────────────────────────── */
+    #empty-state {
+      position: absolute;
+      inset: 0;
+      display: flex;
+      flex-direction: column;
+      align-items: center;
+      justify-content: center;
+      gap: 8px;
+      pointer-events: none;
+      z-index: 0;
+    }
+    #empty-state svg { width: 44px; height: 44px; stroke: var(--border2); fill: none; stroke-width: 1.5; stroke-linecap: round; stroke-linejoin: round; }
+    #empty-state h3 { font-size: 15px; font-weight: 600; color: var(--text3); }
+    #empty-state p { font-size: 12px; color: var(--text3); opacity: .7; }
+
+    /* ─── Connect modal ────────────────────────────────────── */
+    #connect-banner {
+      position: absolute;
+      bottom: 14px;
+      left: 50%;
+      transform: translateX(-50%);
+      background: var(--bg3);
+      border: 1px solid var(--blue);
+      border-radius: 20px;
+      padding: 6px 14px;
+      font-size: 12px;
+      color: var(--blue);
+      font-weight: 500;
+      display: none;
+      z-index: 30;
+      box-shadow: 0 4px 20px rgba(88,166,255,0.2);
+      pointer-events: none;
+    }
+
+    /* ─── Modals ───────────────────────────────────────────── */
+    .overlay {
+      position: fixed;
+      inset: 0;
+      background: rgba(1, 4, 9, 0.8);
+      z-index: 100;
+      display: flex;
+      align-items: center;
+      justify-content: center;
+      backdrop-filter: blur(3px);
+      animation: fadeIn .15s ease;
+    }
+    @keyframes fadeIn { from{opacity:0} to{opacity:1} }
+    @keyframes slideUp { from{opacity:0;transform:translateY(10px)} to{opacity:1;transform:translateY(0)} }
+
+    .modal {
+      background: var(--bg2);
+      border: 1px solid var(--border);
+      border-radius: 12px;
+      width: 400px;
+      max-width: 96vw;
+      box-shadow: 0 20px 60px rgba(0,0,0,0.7);
+      animation: slideUp .2s ease;
+      overflow: hidden;
+    }
+    .modal-hd {
+      display: flex;
+      align-items: center;
+      padding: 14px 16px;
+      border-bottom: 1px solid var(--border);
+      gap: 10px;
+    }
+    .modal-title { font-size: 14px; font-weight: 600; flex: 1; }
+    .modal-x {
+      width: 24px; height: 24px;
+      background: none; border: none;
+      color: var(--text3);
+      cursor: pointer;
+      border-radius: 5px;
+      display: flex; align-items: center; justify-content: center;
+      transition: all .12s;
+    }
+    .modal-x:hover { background: var(--bg4); color: var(--text); }
+    .modal-x svg { width: 14px; height: 14px; stroke: currentColor; fill: none; stroke-width: 2; stroke-linecap: round; stroke-linejoin: round; }
+    .modal-body { padding: 14px 16px; }
+    .modal-ft { padding: 10px 16px; border-top: 1px solid var(--border); display: flex; gap: 8px; justify-content: flex-end; }
+
+    .m-tabs { display: flex; gap: 3px; background: var(--bg); padding: 3px; border-radius: 7px; margin-bottom: 14px; }
+    .m-tab {
+      flex: 1; padding: 6px 10px;
+      border: none; background: none;
+      font-family: var(--font); font-size: 12px; font-weight: 500;
+      color: var(--text3); border-radius: 5px; cursor: pointer;
+      transition: all .15s;
+    }
+    .m-tab.active { background: var(--bg3); color: var(--text); border: 1px solid var(--border); }
+
+    .field { margin-bottom: 12px; }
+    .field:last-child { margin-bottom: 0; }
+    .field label {
+      display: block;
+      font-size: 10px; font-weight: 600; text-transform: uppercase;
+      letter-spacing: .07em; color: var(--text3); font-family: var(--mono);
+      margin-bottom: 5px;
+    }
+    .field input {
+      width: 100%;
+      padding: 8px 10px;
+      background: var(--bg);
+      border: 1px solid var(--border);
+      border-radius: 6px;
+      color: var(--text);
+      font-family: var(--font);
+      font-size: 13px;
+      outline: none;
+      transition: border-color .15s;
+    }
+    .field input:focus { border-color: var(--blue); }
+    .field input::placeholder { color: var(--text3); }
+
+    .search-box {
+      border: 1px solid var(--border);
+      border-radius: 6px;
+      background: var(--bg);
+      max-height: 200px;
+      overflow-y: auto;
+      margin-top: -8px;
+    }
+    .sr-item {
+      display: flex;
+      align-items: center;
+      gap: 8px;
+      padding: 8px 10px;
+      cursor: pointer;
+      border-bottom: 1px solid var(--border);
+      transition: background .1s;
+    }
+    .sr-item:last-child { border-bottom: none; }
+    .sr-item:hover { background: var(--bg3); }
+    .sr-av {
+      width: 26px; height: 26px;
+      border-radius: 50%;
+      background: var(--bg4);
+      display: flex; align-items: center; justify-content: center;
+      font-size: 10px; font-weight: 600; color: var(--text2);
+      flex-shrink: 0;
+    }
+    .sr-name { font-size: 12px; font-weight: 500; color: var(--text); }
+    .sr-sub  { font-size: 11px; color: var(--text3); }
+    .sr-msg  { padding: 14px; text-align: center; font-size: 12px; color: var(--text3); }
+
+    /* org picker dropdown */
+    .org-dropdown {
+      position: absolute;
+      top: calc(100% + 4px);
+      left: 0;
+      width: 280px;
+      background: var(--bg3);
+      border: 1px solid var(--border2);
+      border-radius: var(--radius);
+      box-shadow: 0 8px 24px rgba(0,0,0,0.5);
+      z-index: 50;
+      overflow: hidden;
+    }
+    .org-dropdown input {
+      width: 100%;
+      padding: 9px 12px;
+      background: var(--bg);
+      border: none;
+      border-bottom: 1px solid var(--border);
+      color: var(--text);
+      font-family: var(--font);
+      font-size: 13px;
+      outline: none;
+    }
+    .org-dropdown input::placeholder { color: var(--text3); }
+    .org-dd-list { max-height: 200px; overflow-y: auto; }
+    .org-dd-item {
+      padding: 8px 12px;
+      font-size: 13px;
+      cursor: pointer;
+      transition: background .1s;
+      border-bottom: 1px solid var(--border);
+    }
+    .org-dd-item:last-child { border-bottom: none; }
+    .org-dd-item:hover { background: var(--bg4); }
+    .org-dd-empty { padding: 12px; text-align: center; font-size: 12px; color: var(--text3); }
+
+    /* connect screen */
+    #connect-screen {
+      position: absolute;
+      inset: 0;
+      display: none;
+      flex-direction: column;
+      align-items: center;
+      justify-content: center;
+      gap: 12px;
+      background: var(--bg);
+      z-index: 40;
+    }
+    #connect-screen.show { display: flex; }
+    #connect-screen svg { width: 48px; height: 48px; stroke: var(--text3); fill: none; stroke-width: 1.5; stroke-linecap: round; stroke-linejoin: round; }
+    #connect-screen h2 { font-size: 16px; font-weight: 600; }
+    #connect-screen p { font-size: 13px; color: var(--text2); }
+
+    /* modal buttons */
+    .btn-ok {
+      padding: 7px 14px;
+      border-radius: 6px;
+      font-family: var(--font);
+      font-size: 12px; font-weight: 600;
+      cursor: pointer;
+      border: 1px solid transparent;
+      transition: all .15s;
+    }
+    .btn-ok.secondary { background: var(--bg3); border-color: var(--border); color: var(--text2); }
+    .btn-ok.secondary:hover { color: var(--text); }
+    .btn-ok.confirm { background: var(--green2); color: #fff; border-color: var(--green2); }
+    .btn-ok.confirm:hover { background: var(--green); }
+
+    ::-webkit-scrollbar { width: 4px; }
+    ::-webkit-scrollbar-track { background: transparent; }
+    ::-webkit-scrollbar-thumb { background: var(--border); border-radius: 2px; }
+  </style>
+</head>
+<body>
+
+<!-- Toolbar -->
+<div id="toolbar">
+  <div class="tl-brand">
+    <div class="tl-brand-icon">
+      <svg viewBox="0 0 24 24"><rect x="8" y="1" width="8" height="6" rx="1"/><rect x="1" y="16" width="7" height="6" rx="1"/><rect x="16" y="16" width="7" height="6" rx="1"/><line x1="12" y1="7" x2="12" y2="12"/><line x1="12" y1="12" x2="4.5" y2="16"/><line x1="12" y1="12" x2="19.5" y2="16"/></svg>
+    </div>
+    <span class="tl-brand-name">OrgChart</span>
+  </div>
+
+  <!-- Org picker -->
+  <div style="position:relative">
+    <div class="tl-org-picker" id="org-picker-btn" onclick="toggleOrgDropdown()">
+      <svg viewBox="0 0 24 24"><path d="M3 9l9-7 9 7v11a2 2 0 01-2 2H5a2 2 0 01-2-2z"/><polyline points="9 22 9 12 15 12 15 22"/></svg>
+      <span class="tl-org-name" id="org-picker-label">Select organisation…</span>
+      <svg viewBox="0 0 24 24"><polyline points="6 9 12 15 18 9"/></svg>
+    </div>
+    <div class="org-dropdown" id="org-dropdown" style="display:none">
+      <input id="org-search-input" placeholder="Search organisations…" oninput="onOrgSearch(this.value)" autocomplete="off" />
+      <div class="org-dd-list" id="org-dd-list">
+        <div class="org-dd-empty">Start typing to search…</div>
+      </div>
+    </div>
+  </div>
+
+  <input class="tl-chart-name" id="chart-name-input" value="Org Chart" title="Click to rename chart" />
+
+  <div class="tl-sep"></div>
+
+  <button class="tl-btn" onclick="openAddModal()">
+    <svg viewBox="0 0 24 24"><path d="M20 21v-2a4 4 0 00-4-4H8a4 4 0 00-4 4v2"/><circle cx="12" cy="7" r="4"/><line x1="19" y1="8" x2="19" y2="14"/><line x1="22" y1="11" x2="16" y2="11"/></svg>
+    Add Person
+  </button>
+
+  <button class="tl-btn" onclick="addPlaceholder()">
+    <svg viewBox="0 0 24 24"><circle cx="12" cy="8" r="4" stroke-dasharray="2.5 2"/><path d="M6 20v-2a4 4 0 014-4h4a4 4 0 014 4v2" stroke-dasharray="2.5 2"/></svg>
+    Placeholder
+  </button>
+
+  <div class="tl-sep"></div>
+
+  <button class="tl-btn" id="connect-btn" onclick="toggleConnect()">
+    <svg viewBox="0 0 24 24"><circle cx="6" cy="12" r="2.5"/><circle cx="18" cy="6" r="2.5"/><circle cx="18" cy="18" r="2.5"/><line x1="8.5" y1="12" x2="15.5" y2="7"/><line x1="8.5" y1="12" x2="15.5" y2="17"/></svg>
+    Connect
+  </button>
+
+  <button class="tl-btn" onclick="fitView()">
+    <svg viewBox="0 0 24 24"><path d="M8 3H5a2 2 0 00-2 2v3"/><path d="M21 8V5a2 2 0 00-2-2h-3"/><path d="M3 16v3a2 2 0 002 2h3"/><path d="M16 21h3a2 2 0 002-2v-3"/></svg>
+    Fit
+  </button>
+
+  <div class="tl-sep"></div>
+
+  <button class="tl-btn primary" id="save-btn" onclick="saveChart()">
+    <svg viewBox="0 0 24 24"><path d="M19 21H5a2 2 0 01-2-2V5a2 2 0 012-2h11l5 5v11a2 2 0 01-2 2z"/><polyline points="17 21 17 13 7 13 7 21"/><polyline points="7 3 7 8 15 8"/></svg>
+    Save
+  </button>
+
+  <div class="tl-spacer"></div>
+
+  <div class="tl-status">
+    <div class="tl-status-dot" id="status-dot"></div>
+    <span id="status-text">Ready</span>
+  </div>
+</div>
+
+<!-- Main -->
+<div id="main">
+
+  <!-- Sidebar -->
+  <div id="sidebar">
+    <div class="sb-section">Add to canvas</div>
+
+    <div class="palette-node" onclick="openAddModal()">
+      <div class="palette-icon person">
+        <svg viewBox="0 0 24 24"><path d="M20 21v-2a4 4 0 00-4-4H8a4 4 0 00-4 4v2"/><circle cx="12" cy="7" r="4"/></svg>
+      </div>
+      <div>
+        <div class="palette-label">Pipedrive person</div>
+        <div class="palette-sublabel">Search & link</div>
+      </div>
+    </div>
+
+    <div class="palette-node" onclick="addPlaceholder()">
+      <div class="palette-icon placeholder">
+        <svg viewBox="0 0 24 24"><circle cx="12" cy="8" r="4" stroke-dasharray="2.5 2"/><path d="M6 20v-2a4 4 0 014-4h4a4 4 0 014 4v2" stroke-dasharray="2.5 2"/></svg>
+      </div>
+      <div>
+        <div class="palette-label">Placeholder</div>
+        <div class="palette-sublabel">Unknown person</div>
+      </div>
+    </div>
+
+    <div class="sb-divider"></div>
+    <div class="sb-section">Actions</div>
+
+    <button class="sb-btn" onclick="toggleConnect()">
+      <svg viewBox="0 0 24 24"><circle cx="6" cy="12" r="2.5"/><circle cx="18" cy="6" r="2.5"/><circle cx="18" cy="18" r="2.5"/><line x1="8.5" y1="12" x2="15.5" y2="7"/><line x1="8.5" y1="12" x2="15.5" y2="17"/></svg>
+      Connect mode
+      <span class="sb-badge" id="connect-badge">off</span>
+    </button>
+
+    <button class="sb-btn" onclick="fitView()">
+      <svg viewBox="0 0 24 24"><path d="M8 3H5a2 2 0 00-2 2v3"/><path d="M21 8V5a2 2 0 00-2-2h-3"/><path d="M3 16v3a2 2 0 002 2h3"/><path d="M16 21h3a2 2 0 002-2v-3"/></svg>
+      Fit to screen
+    </button>
+
+    <button class="sb-btn" onclick="clearAll()">
+      <svg viewBox="0 0 24 24"><polyline points="3 6 5 6 21 6"/><path d="M19 6l-1 14H6L5 6"/></svg>
+      Clear canvas
+    </button>
+
+    <div class="sb-divider"></div>
+    <div class="sb-section">Tips</div>
+    <div style="padding:6px 10px 10px; font-size:11px; color:var(--text3); line-height:1.6;">
+      • Drag nodes to reposition<br>
+      • Hover node → drag port to connect<br>
+      • Click edge to delete it<br>
+      • Save stores chart on org note
+    </div>
+  </div>
+
+  <!-- Canvas -->
+  <div id="canvas-wrap">
+    <div id="empty-state">
+      <svg viewBox="0 0 24 24"><rect x="8" y="1" width="8" height="6" rx="1"/><rect x="1" y="16" width="7" height="6" rx="1"/><rect x="16" y="16" width="7" height="6" rx="1"/><line x1="12" y1="7" x2="12" y2="12"/><line x1="12" y1="12" x2="4.5" y2="16"/><line x1="12" y1="12" x2="19.5" y2="16"/></svg>
+      <h3>Empty canvas</h3>
+      <p>Add a person or placeholder to get started</p>
+    </div>
+
+    <svg id="svg-layer" xmlns="http://www.w3.org/2000/svg">
+      <defs>
+        <marker id="arr" markerWidth="8" markerHeight="6" refX="7" refY="3" orient="auto">
+          <polygon points="0 0, 8 3, 0 6" fill="#3d444d"/>
+        </marker>
+        <marker id="arr-blue" markerWidth="8" markerHeight="6" refX="7" refY="3" orient="auto">
+          <polygon points="0 0, 8 3, 0 6" fill="#58a6ff"/>
+        </marker>
+      </defs>
+      <g id="edges-g"></g>
+      <line id="drag-line" marker-end="url(#arr-blue)"/>
+    </svg>
+
+    <div id="nodes-layer"></div>
+
+    <div id="connect-banner">⇄ Drag from a port to connect — Esc to cancel</div>
+
+    <!-- Not-connected screen -->
+    <div id="connect-screen">
+      <svg viewBox="0 0 24 24"><circle cx="12" cy="12" r="10"/><line x1="12" y1="8" x2="12" y2="12"/><line x1="12" y1="16" x2="12.01" y2="16"/></svg>
+      <h2>Not connected</h2>
+      <p>Connect this app to your Pipedrive account first.</p>
+      <a href="/oauth/start" target="_blank">
+        <button class="tl-btn primary" style="padding:8px 18px;font-size:13px">Connect to Pipedrive</button>
+      </a>
+    </div>
+  </div>
+</div>
+
+<!-- Add Person Modal -->
+<div class="overlay" id="modal-add" style="display:none" onclick="overlayClose(event,'modal-add')">
+  <div class="modal">
+    <div class="modal-hd">
+      <span class="modal-title">Add node</span>
+      <button class="modal-x" onclick="closeModal('modal-add')"><svg viewBox="0 0 24 24"><line x1="18" y1="6" x2="6" y2="18"/><line x1="6" y1="6" x2="18" y2="18"/></svg></button>
+    </div>
+    <div class="modal-body">
+      <div class="m-tabs">
+        <button class="m-tab active" id="mt-search" onclick="switchTab('search')">Search Pipedrive</button>
+        <button class="m-tab" id="mt-manual" onclick="switchTab('manual')">Enter manually</button>
+      </div>
+
+      <div id="tp-search">
+        <div class="field">
+          <label>Search people</label>
+          <input id="ps-input" placeholder="Type a name…" oninput="onPersonSearch(this.value)" autocomplete="off" />
+        </div>
+        <div class="search-box" id="ps-results" style="display:none"></div>
+      </div>
+
+      <div id="tp-manual" style="display:none">
+        <div class="field">
+          <label>Name *</label>
+          <input id="m-name" placeholder="e.g. Head of Marketing" />
+        </div>
+        <div class="field">
+          <label>Job title</label>
+          <input id="m-title" placeholder="e.g. CMO" />
+        </div>
+        <div class="field">
+          <label>Department / Team</label>
+          <input id="m-dept" placeholder="e.g. Marketing" />
+        </div>
+      </div>
+    </div>
+    <div class="modal-ft">
+      <button class="btn-ok secondary" onclick="closeModal('modal-add')">Cancel</button>
+      <button class="btn-ok confirm" onclick="confirmAdd()">Add to chart</button>
+    </div>
+  </div>
+</div>
+
+<!-- Edit Node Modal -->
+<div class="overlay" id="modal-edit" style="display:none" onclick="overlayClose(event,'modal-edit')">
+  <div class="modal">
+    <div class="modal-hd">
+      <span class="modal-title">Edit node</span>
+      <button class="modal-x" onclick="closeModal('modal-edit')"><svg viewBox="0 0 24 24"><line x1="18" y1="6" x2="6" y2="18"/><line x1="6" y1="6" x2="18" y2="18"/></svg></button>
+    </div>
+    <div class="modal-body">
+      <div class="field"><label>Name</label><input id="e-name" /></div>
+      <div class="field"><label>Job title</label><input id="e-title" /></div>
+      <div class="field"><label>Department / Team</label><input id="e-dept" /></div>
+    </div>
+    <div class="modal-ft">
+      <button class="btn-ok secondary" onclick="closeModal('modal-edit')">Cancel</button>
+      <button class="btn-ok confirm" onclick="confirmEdit()">Save</button>
+    </div>
+  </div>
+</div>
+
+<script>
+(async () => {
+
+/* ── SDK + Params ─────────────────────────────────────────────── */
+let sdk, companyId = "", orgId = "", orgName = "";
+try {
+  sdk = await AppExtensionsSDK.initialize({ identifier: "__orgchart__" });
+  const u = sdk.userIdentifier || {};
+  companyId = String(u.companyId || new URLSearchParams(location.search).get("companyId") || "");
+  orgId     = String(u.id        || new URLSearchParams(location.search).get("id")        || "");
+  orgName   = String(u.name      || new URLSearchParams(location.search).get("name")      || "");
+} catch(e) {
+  const p   = new URLSearchParams(location.search);
+  companyId = p.get("companyId") || "";
+  orgId     = p.get("id")        || "";
+  orgName   = p.get("name")      || "";
+}
+
+/* ── Auth check ──────────────────────────────────────────────── */
+if (companyId) {
+  const s = await fetch(`/api/status?companyId=${companyId}`).then(r=>r.json()).catch(()=>({connected:false}));
+  if (!s.connected) {
+    document.getElementById("connect-screen").classList.add("show");
+    return;
+  }
+}
+
+/* ── State ───────────────────────────────────────────────────── */
+let nodes   = {};  // id → {id, name, title, dept, pdPersonId, placeholder, x, y}
+let edges   = [];  // [{id, from, to}]
+let nidC    = 0;
+let eidC    = 0;
+let connecting  = false;
+let connSrc     = null;
+let selectedPerson = null;
+let editNodeId  = null;
+let activeTab   = "search";
+let dirty       = false;
+let saveTimer   = null;
+let orgPickerOpen = false;
+
+const canvasEl   = document.getElementById("canvas-wrap");
+const nodesEl    = document.getElementById("nodes-layer");
+const edgesEl    = document.getElementById("edges-g");
+const dragLine   = document.getElementById("drag-line");
+const emptyEl    = document.getElementById("empty-state");
+const banner     = document.getElementById("connect-banner");
+const statusTxt  = document.getElementById("status-text");
+const statusDot  = document.getElementById("status-dot");
+
+/* ── Prefill org if passed via params ────────────────────────── */
+if (orgId && orgName) {
+  document.getElementById("org-picker-label").textContent = orgName;
+  await loadChart();
+}
+
+/* ── Render ──────────────────────────────────────────────────── */
+function renderAll() {
+  nodesEl.innerHTML = "";
+  edgesEl.innerHTML = "";
+  Object.values(nodes).forEach(makeNodeEl);
+  edges.forEach(makeEdgeEl);
+  syncEmpty();
+}
+
+function syncEmpty() {
+  emptyEl.style.display = Object.keys(nodes).length ? "none" : "flex";
+}
+
+function initials(n) {
+  return (n||"?").trim().split(/\s+/).map(w=>w[0]||"").join("").slice(0,2).toUpperCase();
+}
+
+function makeNodeEl(n) {
+  const el = document.createElement("div");
+  el.className = "node" + (n.placeholder ? " placeholder-node" : "");
+  el.id = "nd-"+n.id;
+  el.style.cssText = `left:${n.x}px;top:${n.y}px`;
+
+  const deptColor = n.placeholder
+    ? "rgba(188,140,255,0.2);color:rgba(188,140,255,0.7)"
+    : "rgba(88,166,255,0.12);color:rgba(88,166,255,0.8)";
+
+  el.innerHTML = `
+    <div class="node-header">
+      <span class="node-dept-tag" style="background:${deptColor}">${n.dept||"—"}</span>
+      <div class="node-type-icon ${n.pdPersonId?'linked':'unlinked'}">
+        ${n.pdPersonId
+          ? `<svg viewBox="0 0 24 24"><polyline points="20 6 9 17 4 12"/></svg>`
+          : `<svg viewBox="0 0 24 24"><circle cx="12" cy="8" r="4" stroke-dasharray="2.5 2"/></svg>`}
+      </div>
+    </div>
+    <div class="node-body">
+      <div class="node-avatar ${n.placeholder?'ghost':''}">${n.placeholder?"?":initials(n.name)}</div>
+      <div class="node-name">${n.name||"Unknown"}</div>
+      <div class="node-title">${n.title||""}</div>
+    </div>
+    <div class="node-hover-actions">
+      <button class="nha-btn" title="Edit" onclick="openEdit('${n.id}')">
+        <svg viewBox="0 0 24 24"><path d="M11 4H4a2 2 0 00-2 2v14a2 2 0 002 2h14a2 2 0 002-2v-7"/><path d="M18.5 2.5a2.121 2.121 0 013 3L12 15l-4 1 1-4z"/></svg>
+      </button>
+      <button class="nha-btn del" title="Delete" onclick="deleteNode('${n.id}')">
+        <svg viewBox="0 0 24 24"><polyline points="3 6 5 6 21 6"/><path d="M19 6l-1 14H6L5 6"/><path d="M10 11v6"/><path d="M14 11v6"/></svg>
+      </button>
+    </div>
+    <div class="port port-bottom" data-id="${n.id}"></div>
+    <div class="port port-top"    data-id="${n.id}"></div>
+  `;
+
+  dragNode(el, n);
+  setupPorts(el, n.id);
+  nodesEl.appendChild(el);
+}
+
+function makeEdgeEl(e) {
+  const f = nodes[e.from], t = nodes[e.to];
+  if (!f || !t) return;
+  const path = document.createElementNS("http://www.w3.org/2000/svg","path");
+  path.id = "ed-"+e.id;
+  path.setAttribute("class","edge-path");
+  path.setAttribute("marker-end","url(#arr)");
+  path.setAttribute("d", edgePath(f,t));
+  path.addEventListener("click", ()=>deleteEdge(e.id));
+  edgesEl.appendChild(path);
+}
+
+function edgePath(f, t) {
+  const fw = nodeW(f), fh = nodeH(f);
+  const tw = nodeW(t);
+  const x1 = f.x + fw/2, y1 = f.y + fh;
+  const x2 = t.x + tw/2, y2 = t.y;
+  const cp = Math.abs(y2-y1) * 0.5;
+  return `M${x1},${y1} C${x1},${y1+cp} ${x2},${y2-cp} ${x2},${y2}`;
+}
+
+function nodeW(n) { return document.getElementById("nd-"+n.id)?.offsetWidth || 190; }
+function nodeH(n) { return document.getElementById("nd-"+n.id)?.offsetHeight || 110; }
+
+function refreshNodeEdges(nid) {
+  edges.forEach(e => {
+    if (e.from !== nid && e.to !== nid) return;
+    const path = document.getElementById("ed-"+e.id);
+    if (!path) return;
+    path.setAttribute("d", edgePath(nodes[e.from], nodes[e.to]));
+  });
+}
+
+/* ── Drag nodes ──────────────────────────────────────────────── */
+function dragNode(el, n) {
+  let ox, oy, nx0, ny0, active = false;
+
+  el.addEventListener("mousedown", e => {
+    if (connecting) return;
+    if (e.target.closest(".nha-btn")) return;
+    if (e.target.closest(".port")) return;
+    e.preventDefault();
+    active = true; ox = e.clientX; oy = e.clientY; nx0 = n.x; ny0 = n.y;
+    el.classList.add("dragging");
+  });
+
+  document.addEventListener("mousemove", e => {
+    if (!active) return;
+    n.x = nx0 + e.clientX - ox;
+    n.y = ny0 + e.clientY - oy;
+    el.style.left = n.x+"px";
+    el.style.top  = n.y+"px";
+    refreshNodeEdges(n.id);
+  });
+
+  document.addEventListener("mouseup", () => {
+    if (!active) return;
+    active = false;
+    el.classList.remove("dragging");
+    markDirty();
+  });
+}
+
+/* ── Port connections ────────────────────────────────────────── */
+function setupPorts(el, nodeId) {
+  el.querySelectorAll(".port").forEach(port => {
+    port.addEventListener("mousedown", e => {
+      e.stopPropagation();
+      e.preventDefault();
+      startEdgeDrag(nodeId, e);
+    });
+  });
+}
+
+function startEdgeDrag(fromId, e) {
+  connSrc = fromId;
+  banner.style.display = "block";
+  const rect = canvasEl.getBoundingClientRect();
+  const fn = nodes[fromId];
+  const x1 = fn.x + nodeW(fn)/2;
+  const y1 = fn.y + nodeH(fn);
+  dragLine.setAttribute("x1", x1); dragLine.setAttribute("y1", y1);
+  dragLine.setAttribute("x2", e.clientX-rect.left); dragLine.setAttribute("y2", e.clientY-rect.top);
+  dragLine.style.display = "block";
+
+  function onMove(me) {
+    dragLine.setAttribute("x2", me.clientX-rect.left);
+    dragLine.setAttribute("y2", me.clientY-rect.top);
+  }
+  function onUp(me) {
+    dragLine.style.display = "none";
+    banner.style.display = "none";
+    connSrc = null;
+    document.removeEventListener("mousemove", onMove);
+    document.removeEventListener("mouseup", onUp);
+    const hit = document.elementFromPoint(me.clientX, me.clientY)?.closest(".node");
+    if (hit && hit.id !== "nd-"+fromId) {
+      addEdge(fromId, hit.id.replace("nd-",""));
+    }
+  }
+  document.addEventListener("mousemove", onMove);
+  document.addEventListener("mouseup", onUp);
+}
+
+function toggleConnect() {
+  connecting = !connecting;
+  const btn = document.getElementById("connect-btn");
+  const badge = document.getElementById("connect-badge");
+  btn.classList.toggle("active", connecting);
+  badge.textContent = connecting ? "on" : "off";
+  banner.style.display = connecting ? "block" : "none";
+  if (!connecting) dragLine.style.display = "none";
+}
+
+function addEdge(fromId, toId) {
+  if (edges.find(e=>e.from===fromId&&e.to===toId)) return;
+  if (fromId === toId) return;
+  const e = {id: ++eidC, from: fromId, to: toId};
+  edges.push(e);
+  makeEdgeEl(e);
+  markDirty();
+}
+
+function deleteEdge(eid) {
+  edges = edges.filter(e=>e.id!==eid);
+  document.getElementById("ed-"+eid)?.remove();
+  markDirty();
+}
+
+/* ── Node CRUD ───────────────────────────────────────────────── */
+window.deleteNode = function(nid) {
+  delete nodes[nid];
+  document.getElementById("nd-"+nid)?.remove();
+  const rem = edges.filter(e=>e.from===nid||e.to===nid);
+  rem.forEach(e => document.getElementById("ed-"+e.id)?.remove());
+  edges = edges.filter(e=>e.from!==nid&&e.to!==nid);
+  syncEmpty();
+  markDirty();
+};
+
+window.openEdit = function(nid) {
+  editNodeId = nid;
+  const n = nodes[nid];
+  document.getElementById("e-name").value  = n.name||"";
+  document.getElementById("e-title").value = n.title||"";
+  document.getElementById("e-dept").value  = n.dept||"";
+  document.getElementById("modal-edit").style.display = "flex";
+};
+
+window.confirmEdit = function() {
+  const n = nodes[editNodeId];
+  n.name  = document.getElementById("e-name").value.trim() || n.name;
+  n.title = document.getElementById("e-title").value.trim();
+  n.dept  = document.getElementById("e-dept").value.trim();
+  document.getElementById("nd-"+n.id)?.remove();
+  makeNodeEl(n);
+  refreshNodeEdges(n.id);
+  markDirty();
+  closeModal("modal-edit");
+};
+
+/* ── Add modal ───────────────────────────────────────────────── */
+window.openAddModal = function() {
+  selectedPerson = null;
+  document.getElementById("ps-input").value = "";
+  document.getElementById("ps-results").style.display = "none";
+  document.getElementById("m-name").value = "";
+  document.getElementById("m-title").value = "";
+  document.getElementById("m-dept").value = "";
+  switchTab("search");
+  document.getElementById("modal-add").style.display = "flex";
+  setTimeout(()=>document.getElementById("ps-input").focus(), 60);
+};
+
+window.addPlaceholder = function() {
+  const count = Object.values(nodes).filter(n=>n.placeholder).length+1;
+  const n = {
+    id: String(++nidC), name: `Unknown Person ${count}`,
+    title: "", dept: "", placeholder: true, pdPersonId: null,
+    x: 60+Math.random()*280, y: 60+Math.random()*200,
+  };
+  nodes[n.id] = n;
+  makeNodeEl(n);
+  syncEmpty();
+  markDirty();
+};
+
+window.confirmAdd = function() {
+  if (activeTab === "search") {
+    if (!selectedPerson) return;
+    const n = {
+      id: String(++nidC),
+      name: selectedPerson.name,
+      title: selectedPerson.title||"",
+      dept: selectedPerson.org_name||"",
+      placeholder: false,
+      pdPersonId: String(selectedPerson.pdId),
+      x: 60+Math.random()*280, y: 60+Math.random()*200,
+    };
+    nodes[n.id] = n;
+    makeNodeEl(n);
+    syncEmpty();
+    markDirty();
+  } else {
+    const name = document.getElementById("m-name").value.trim();
+    if (!name) { document.getElementById("m-name").focus(); return; }
+    const n = {
+      id: String(++nidC), name,
+      title: document.getElementById("m-title").value.trim(),
+      dept:  document.getElementById("m-dept").value.trim(),
+      placeholder: false, pdPersonId: null,
+      x: 60+Math.random()*280, y: 60+Math.random()*200,
+    };
+    nodes[n.id] = n;
+    makeNodeEl(n);
+    syncEmpty();
+    markDirty();
+  }
+  closeModal("modal-add");
+};
+
+/* ── Tabs ────────────────────────────────────────────────────── */
+window.switchTab = function(tab) {
+  activeTab = tab;
+  document.getElementById("tp-search").style.display = tab==="search" ? "block" : "none";
+  document.getElementById("tp-manual").style.display = tab==="manual" ? "block" : "none";
+  document.getElementById("mt-search").classList.toggle("active", tab==="search");
+  document.getElementById("mt-manual").classList.toggle("active", tab==="manual");
+};
+
+/* ── Person search ───────────────────────────────────────────── */
+let psTimer;
+window.onPersonSearch = function(v) {
+  clearTimeout(psTimer);
+  const el = document.getElementById("ps-results");
+  if (!v.trim()) { el.style.display="none"; return; }
+  el.style.display = "block";
+  el.innerHTML = `<div class="sr-msg">Searching…</div>`;
+  psTimer = setTimeout(()=>doPsSearch(v), 280);
+};
+
+async function doPsSearch(q) {
+  const el = document.getElementById("ps-results");
+  try {
+    const d = await fetch(`/api/orgchart/search?q=${encodeURIComponent(q)}&companyId=${companyId}`).then(r=>r.json());
+    if (!(d.people||[]).length) {
+      el.innerHTML = `<div class="sr-msg">No results for "${q}"</div>`; return;
+    }
+    el.innerHTML = d.people.map(p=>`
+      <div class="sr-item" onclick='selectPerson(${JSON.stringify(p).replace(/'/g,"&#39;")})'>
+        <div class="sr-av">${initials(p.name)}</div>
+        <div><div class="sr-name">${p.name}</div><div class="sr-sub">${p.title||p.org_name||""}</div></div>
+      </div>`).join("");
+  } catch(e) {
+    el.innerHTML = `<div class="sr-msg">Search unavailable</div>`;
+  }
+}
+
+window.selectPerson = function(p) {
+  selectedPerson = p;
+  document.getElementById("ps-input").value = p.name;
+  document.getElementById("ps-results").style.display = "none";
+};
+
+/* ── Org picker ──────────────────────────────────────────────── */
+window.toggleOrgDropdown = function() {
+  orgPickerOpen = !orgPickerOpen;
+  document.getElementById("org-dropdown").style.display = orgPickerOpen ? "block" : "none";
+  if (orgPickerOpen) setTimeout(()=>document.getElementById("org-search-input").focus(), 50);
+};
+
+document.addEventListener("click", e=>{
+  if (!e.target.closest("#org-picker-btn") && !e.target.closest("#org-dropdown")) {
+    document.getElementById("org-dropdown").style.display = "none";
+    orgPickerOpen = false;
+  }
+});
+
+let orgTimer;
+window.onOrgSearch = function(v) {
+  clearTimeout(orgTimer);
+  const el = document.getElementById("org-dd-list");
+  if (!v.trim()) { el.innerHTML=`<div class="org-dd-empty">Start typing…</div>`; return; }
+  el.innerHTML = `<div class="org-dd-empty">Searching…</div>`;
+  orgTimer = setTimeout(()=>doOrgSearch(v), 280);
+};
+
+async function doOrgSearch(q) {
+  const el = document.getElementById("org-dd-list");
+  try {
+    const d = await fetch(`/api/orgs/search?q=${encodeURIComponent(q)}&companyId=${companyId}`).then(r=>r.json());
+    if (!(d.orgs||[]).length) { el.innerHTML=`<div class="org-dd-empty">No results</div>`; return; }
+    el.innerHTML = d.orgs.map(o=>`<div class="org-dd-item" onclick="selectOrg(${o.id},'${o.name.replace(/'/g,"\\'")}')"> ${o.name}</div>`).join("");
+  } catch(e) { el.innerHTML=`<div class="org-dd-empty">Error</div>`; }
+}
+
+window.selectOrg = async function(id, name) {
+  orgId   = String(id);
+  orgName = name;
+  document.getElementById("org-picker-label").textContent = name;
+  document.getElementById("org-dropdown").style.display = "none";
+  orgPickerOpen = false;
+  // Reset canvas and load saved chart for this org
+  nodes = {}; edges = []; nidC = 0; eidC = 0;
+  renderAll();
+  await loadChart();
+};
+
+/* ── Save / Load ─────────────────────────────────────────────── */
+function markDirty() {
+  dirty = true;
+  setStatus("Unsaved changes", true);
+  clearTimeout(saveTimer);
+  saveTimer = setTimeout(autoSave, 5000);
+}
+
+async function autoSave() {
+  if (dirty) await doSave();
+}
+
+window.saveChart = async function() { await doSave(); };
+
+async function doSave() {
+  if (!orgId) { setStatus("Select an organisation first"); return; }
+  statusDot.classList.add("warn");
+  setStatus("Saving…");
+  try {
+    const r = await fetch("/api/orgchart/save", {
+      method: "POST",
+      headers: {"Content-Type":"application/json"},
+      body: JSON.stringify({
+        orgId, companyId,
+        chartName: document.getElementById("chart-name-input").value.trim() || "Org Chart",
+        chart: JSON.stringify({nodes, edges, nidC, eidC}),
+      }),
+    });
+    const d = await r.json();
+    if (d.ok) { dirty = false; setStatus("Saved ✓"); setTimeout(()=>setStatus("Ready"),3000); }
+    else setStatus("Save failed");
+  } catch(e) { setStatus("Network error"); }
+  finally { statusDot.classList.remove("warn"); }
+}
+
+async function loadChart() {
+  if (!orgId) return;
+  setStatus("Loading…");
+  try {
+    const d = await fetch(`/api/orgchart/load?orgId=${orgId}&companyId=${companyId}`).then(r=>r.json());
+    if (d.chart) {
+      const c = JSON.parse(d.chart);
+      nodes = c.nodes || {}; edges = c.edges || [];
+      nidC  = c.nidC  || 0;  eidC  = c.eidC  || 0;
+      if (d.chartName) document.getElementById("chart-name-input").value = d.chartName;
+      renderAll();
+      setStatus("Chart loaded");
+    } else {
+      setStatus("No saved chart — start building!");
+    }
+  } catch(e) { setStatus("Ready"); }
+}
+
+/* ── Fit view ────────────────────────────────────────────────── */
+window.fitView = function() {
+  const ns = Object.values(nodes);
+  if (!ns.length) return;
+  const minX = Math.min(...ns.map(n=>n.x));
+  const minY = Math.min(...ns.map(n=>n.y));
+  const pad  = 40;
+  ns.forEach(n => {
+    n.x -= minX - pad; n.y -= minY - pad;
+    const el = document.getElementById("nd-"+n.id);
+    if (el) { el.style.left = n.x+"px"; el.style.top = n.y+"px"; }
+  });
+  edges.forEach(e => refreshNodeEdges(e.from));
+};
+
+/* ── Clear ───────────────────────────────────────────────────── */
+window.clearAll = function() {
+  if (!confirm("Clear the entire canvas? This cannot be undone.")) return;
+  nodes = {}; edges = []; nidC = 0; eidC = 0;
+  renderAll();
+  markDirty();
+};
+
+/* ── Modal helpers ───────────────────────────────────────────── */
+window.closeModal = id => document.getElementById(id).style.display = "none";
+window.overlayClose = (e, id) => { if (e.target.classList.contains("overlay")) closeModal(id); };
+
+/* ── Keyboard ────────────────────────────────────────────────── */
+document.addEventListener("keydown", e=>{
+  if (e.key === "Escape") {
+    if (connecting) toggleConnect();
+    if (dragLine.style.display !== "none") { dragLine.style.display = "none"; connSrc = null; }
+  }
+});
+
+/* ── Status ──────────────────────────────────────────────────── */
+function setStatus(msg, warn=false) {
+  statusTxt.textContent = msg;
+  statusDot.classList.toggle("warn", warn);
+}
+
+})();
+</script>
+</body>
+</html>
