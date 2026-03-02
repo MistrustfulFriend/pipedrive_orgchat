@@ -16,13 +16,15 @@ from pathlib import Path
 
 BASE_DIR = Path(__file__).resolve().parent
 
-def html_path(filename: str) -> str:
-    # Works whether your files are in ./static/ or next to app.py
-    p1 = BASE_DIR / "static" / filename
-    p2 = BASE_DIR / filename
+def html_file(name: str) -> str:
+    # Works whether files are in ./static or project root
+    p1 = BASE_DIR / "static" / name
+    p2 = BASE_DIR / name
     if p1.exists():
         return str(p1)
-    return str(p2)
+    if p2.exists():
+        return str(p2)
+    raise FileNotFoundError(f"Cannot find {name} in static/ or project root")
 
 # ──────────────────────────────────────────────────────────────
 # App
@@ -210,7 +212,7 @@ def root():
 
 @app.get("/panel")
 def panel():
-    return FileResponse(html_path("panel.html"))
+    return FileResponse(html_file("panel.html"))
 
 
 @app.get("/health")
@@ -256,7 +258,7 @@ def oauth_start():
             "state": state,
         }
     )
-    return RedirectResponse(f"https://oauth.pipedrive.com/marketplace/oauth/authorize?{params}")
+    return FileResponse(html_file("oauth_success.html"))
 
 
 @app.get("/oauth/callback")
