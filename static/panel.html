@@ -410,27 +410,26 @@
       stroke-width: 16;
       cursor: pointer;
     }
-    .edge-group:hover .edge-path { stroke: var(--red); }
+    .edge-group:hover .edge-path { stroke: var(--blue); }
+    .edge-group.edge-selected .edge-path { stroke: var(--blue); stroke-width: 2.5; }
 
-    /* Disconnect ✕ button that floats on the midpoint of each edge */
-    .edge-del-btn {
-      display: none;
-      cursor: pointer;
-    }
-    .edge-del-circle {
-      fill: white;
-      stroke: var(--red);
-      stroke-width: 1.5;
-      transition: fill .12s;
-    }
-    .edge-del-x {
-      stroke: var(--red);
-      stroke-width: 2;
-      stroke-linecap: round;
-    }
-    .edge-group:hover .edge-del-btn { display: block; }
+    /* ✕ delete button at midpoint */
+    .edge-del-btn { display: none; cursor: pointer; }
+    .edge-del-circle { fill: white; stroke: var(--red); stroke-width: 1.5; transition: fill .12s; }
+    .edge-del-x { stroke: var(--red); stroke-width: 2; stroke-linecap: round; }
+    .edge-group:hover .edge-del-btn,
+    .edge-group.edge-selected .edge-del-btn { display: block; }
     .edge-del-btn:hover .edge-del-circle { fill: var(--red); }
     .edge-del-btn:hover .edge-del-x { stroke: white; }
+
+    /* ⇄ reroute handle — drag arrowhead to a new target */
+    .edge-reroute-btn { display: none; cursor: crosshair; }
+    .edge-reroute-circle { fill: white; stroke: var(--blue); stroke-width: 1.5; transition: fill .12s; }
+    .edge-reroute-arrow { stroke: var(--blue); stroke-width: 2; stroke-linecap: round; fill: none; }
+    .edge-group:hover .edge-reroute-btn,
+    .edge-group.edge-selected .edge-reroute-btn { display: block; }
+    .edge-reroute-btn:hover .edge-reroute-circle { fill: var(--blue); }
+    .edge-reroute-btn:hover .edge-reroute-arrow { stroke: white; }
 
     #drag-line {
       fill: none;
@@ -826,12 +825,12 @@
     <div class="sb-section">Tips</div>
     <div style="padding:6px 10px 10px; font-size:11px; color:var(--text3); line-height:1.6;">
       • Drag nodes to reposition<br>
-      • Shift+click or drag on canvas to multi-select<br>
+      • Drag on canvas or Shift+click to multi-select<br>
+      • Select multiple nodes → drag a port → connect all to one target<br>
+      • Hover a connection → click ✕ to delete or ⇄ to reroute to another node<br>
+      • Click a connection to keep its buttons pinned<br>
       • Delete key removes selected nodes<br>
-      • Hover a node → drag any port to connect<br>
-      • Hover a connection → click ✕ to delete it<br>
-      • Scroll wheel or +/− to zoom<br>
-      • Save stores chart on org note
+      • Scroll wheel or +/− to zoom
     </div>
   </div>
 
@@ -1054,12 +1053,14 @@ canvasEl.addEventListener("wheel", e => {
 
 applyCanvasTransform();
 
-/* ── Prefill org if passed via params ────────────────────────── */
-if (orgId && orgName) {
-  document.getElementById("org-picker-label").textContent = orgName;
-  await loadChart();
-} else if (orgId) {
-  // Have id but not name — load chart anyway, name will appear after load
+/* ── Prefill org from context ────────────────────────────────── */
+// When opened from a Pipedrive company page, orgId + orgName are injected
+// via the SDK context (ctx.id / ctx.name). Load immediately — no search needed.
+if (orgId) {
+  const label = orgName || orgId;
+  document.getElementById("org-picker-label").textContent = label;
+  // Show a subtle indicator that the org was auto-detected
+  if (orgName) setStatus(`Loaded: ${orgName}`);
   await loadChart();
 }
 
@@ -1131,7 +1132,7 @@ function makeEdgeEl(e) {
   g.id = "ed-"+e.id;
   g.setAttribute("class","edge-group");
 
-  // Invisible wide hit area
+  // Invisible wide hit area (for hover detection)
   const hit = document.createElementNS("http://www.w3.org/2000/svg","path");
   hit.setAttribute("class","edge-hit");
   hit.setAttribute("d", edgePath(f,t));
@@ -1142,7 +1143,13 @@ function makeEdgeEl(e) {
   path.setAttribute("marker-end","url(#arr)");
   path.setAttribute("d", edgePath(f,t));
 
-  // Disconnect button at midpoint
+  // Click on line selects the edge (to keep buttons visible without hover)
+  hit.addEventListener("click", (ev) => {
+    ev.stopPropagation();
+    selectEdge(e.id);
+  });
+
+  // ── Delete (✕) button at midpoint ────────────────────────
   const [mx, my] = edgeMidpoint(f, t);
   const delG = document.createElementNS("http://www.w3.org/2000/svg","g");
   delG.setAttribute("class","edge-del-btn");
@@ -1152,27 +1159,118 @@ function makeEdgeEl(e) {
   circle.setAttribute("class","edge-del-circle");
   circle.setAttribute("r","8");
 
-  const x1 = document.createElementNS("http://www.w3.org/2000/svg","line");
-  x1.setAttribute("class","edge-del-x");
-  x1.setAttribute("x1","-3"); x1.setAttribute("y1","-3");
-  x1.setAttribute("x2","3");  x1.setAttribute("y2","3");
+  const dx1 = document.createElementNS("http://www.w3.org/2000/svg","line");
+  dx1.setAttribute("class","edge-del-x");
+  dx1.setAttribute("x1","-3"); dx1.setAttribute("y1","-3");
+  dx1.setAttribute("x2","3");  dx1.setAttribute("y2","3");
+  const dx2 = document.createElementNS("http://www.w3.org/2000/svg","line");
+  dx2.setAttribute("class","edge-del-x");
+  dx2.setAttribute("x1","3");  dx2.setAttribute("y1","-3");
+  dx2.setAttribute("x2","-3"); dx2.setAttribute("y2","3");
 
-  const x2 = document.createElementNS("http://www.w3.org/2000/svg","line");
-  x2.setAttribute("class","edge-del-x");
-  x2.setAttribute("x1","3");  x2.setAttribute("y1","-3");
-  x2.setAttribute("x2","-3"); x2.setAttribute("y2","3");
+  delG.appendChild(circle); delG.appendChild(dx1); delG.appendChild(dx2);
+  delG.addEventListener("click", (ev) => { ev.stopPropagation(); deleteEdge(e.id); });
 
-  delG.appendChild(circle);
-  delG.appendChild(x1);
-  delG.appendChild(x2);
-    delG.addEventListener("click", (ev) => { ev.stopPropagation(); deleteEdge(e.id); });
+  // ── Reroute (⇄) button near the arrowhead ─────────────────
+  const [rx, ry] = edgeArrowPos(f, t);
+  const rerouteG = document.createElementNS("http://www.w3.org/2000/svg","g");
+  rerouteG.setAttribute("class","edge-reroute-btn");
+  rerouteG.setAttribute("transform",`translate(${rx},${ry})`);
+
+  const rc = document.createElementNS("http://www.w3.org/2000/svg","circle");
+  rc.setAttribute("class","edge-reroute-circle");
+  rc.setAttribute("r","8");
+
+  // Two small arrows inside: → ←
+  const ra = document.createElementNS("http://www.w3.org/2000/svg","polyline");
+  ra.setAttribute("class","edge-reroute-arrow");
+  ra.setAttribute("points","-4,0 0,-3 4,0");
+  const ra2 = document.createElementNS("http://www.w3.org/2000/svg","line");
+  ra2.setAttribute("class","edge-reroute-arrow");
+  ra2.setAttribute("x1","0"); ra2.setAttribute("y1","-3");
+  ra2.setAttribute("x2","0"); ra2.setAttribute("y2","3");
+
+  rerouteG.appendChild(rc); rerouteG.appendChild(ra); rerouteG.appendChild(ra2);
+  rerouteG.addEventListener("mousedown", (ev) => {
+    ev.stopPropagation();
+    ev.preventDefault();
+    startEdgeReroute(e.id, ev);
+  });
 
   g.appendChild(hit);
   g.appendChild(path);
   g.appendChild(delG);
-  // NOTE: We do NOT add a click handler to `g` itself — that caused
-  // accidental deletions when hovering. Only the explicit ✕ button deletes.
+  g.appendChild(rerouteG);
   edgesEl.appendChild(g);
+}
+
+/* Returns a point close to the arrowhead (near the "to" node) */
+function edgeArrowPos(f, t) {
+  const fw = nodeW(f), fh = nodeH(f), tw = nodeW(t), th = nodeH(t);
+  const fcx = f.x + fw/2, fcy = f.y + fh/2;
+  const tcx = t.x + tw/2, tcy = t.y + th/2;
+  const dx = tcx - fcx, dy = tcy - fcy;
+  // Approximately 1/5 from the arrowhead along the bezier (t=0.85)
+  let x2, y2;
+  if (Math.abs(dx) > Math.abs(dy)) {
+    x2 = dx > 0 ? t.x       : t.x + tw;
+    y2 = tcy;
+  } else {
+    x2 = tcx;
+    y2 = dy > 0 ? t.y       : t.y + th;
+  }
+  // Offset the handle slightly away from the node edge so it doesn't overlap
+  const ox = dx > 0 ? -18 : (dx < 0 ? 18 : 0);
+  const oy = dy > 0 ? -18 : (dy < 0 ? 18 : 0);
+  return [x2 + ox, y2 + oy];
+}
+
+/* Reroute: drag the arrowhead end to a new target node */
+function startEdgeReroute(edgeId, ev) {
+  const edge = edges.find(e => e.id === edgeId);
+  if (!edge) return;
+  const f = nodes[edge.from];
+  if (!f) return;
+
+  // Show drag line from the "from" node
+  const rect = canvasEl.getBoundingClientRect();
+  const [px, py] = portPos(edge.from, "bottom");
+  dragLine.setAttribute("x1", px); dragLine.setAttribute("y1", py);
+  dragLine.setAttribute("x2", (ev.clientX - rect.left) / zoomLevel);
+  dragLine.setAttribute("y2", (ev.clientY - rect.top)  / zoomLevel);
+  dragLine.style.display = "block";
+  banner.textContent = "⇄ Drop on a new node to reroute — Esc to cancel";
+  banner.style.display = "block";
+
+  // Visually hide the existing edge while rerouting
+  const existingG = document.getElementById("ed-"+edgeId);
+  if (existingG) existingG.style.opacity = "0.25";
+
+  function onMove(me) {
+    dragLine.setAttribute("x2", (me.clientX - rect.left) / zoomLevel);
+    dragLine.setAttribute("y2", (me.clientY - rect.top)  / zoomLevel);
+  }
+  function onUp(me) {
+    dragLine.style.display = "none";
+    banner.style.display = "none";
+    banner.textContent = "⇄ Drag from a port to connect — Esc to cancel";
+    if (existingG) existingG.style.opacity = "";
+    document.removeEventListener("mousemove", onMove);
+    document.removeEventListener("mouseup", onUp);
+
+    const hitEl = document.elementFromPoint(me.clientX, me.clientY)?.closest(".node");
+    if (hitEl && hitEl.id !== "nd-"+edge.from) {
+      const newTo = hitEl.id.replace("nd-","");
+      // Remove old edge, add new one (reuse same from)
+      edges = edges.filter(e => e.id !== edgeId);
+      document.getElementById("ed-"+edgeId)?.remove();
+      addEdge(edge.from, newTo);
+      setStatus("Connection rerouted");
+    }
+    clearEdgeSelection();
+  }
+  document.addEventListener("mousemove", onMove);
+  document.addEventListener("mouseup", onUp);
 }
 
 function edgeMidpoint(f, t) {
@@ -1237,14 +1335,40 @@ function refreshNodeEdges(nid) {
     if (e.from !== nid && e.to !== nid) return;
     const g = document.getElementById("ed-"+e.id);
     if (!g) return;
-    const d = edgePath(nodes[e.from], nodes[e.to]);
+    const f = nodes[e.from], t = nodes[e.to];
+    const d = edgePath(f, t);
     g.querySelectorAll(".edge-hit, .edge-path").forEach(p => p.setAttribute("d", d));
-    // Move the disconnect button to new midpoint
-    const [mx, my] = edgeMidpoint(nodes[e.from], nodes[e.to]);
+    // Reposition delete button
+    const [mx, my] = edgeMidpoint(f, t);
     const delBtn = g.querySelector(".edge-del-btn");
     if (delBtn) delBtn.setAttribute("transform", `translate(${mx},${my})`);
+    // Reposition reroute button
+    const [rx, ry] = edgeArrowPos(f, t);
+    const rerouteBtn = g.querySelector(".edge-reroute-btn");
+    if (rerouteBtn) rerouteBtn.setAttribute("transform", `translate(${rx},${ry})`);
   });
 }
+
+/* ── Edge selection (keeps action buttons visible after click) ── */
+let selectedEdgeId = null;
+
+function selectEdge(eid) {
+  clearEdgeSelection();
+  selectedEdgeId = eid;
+  document.getElementById("ed-"+eid)?.classList.add("edge-selected");
+}
+
+function clearEdgeSelection() {
+  if (selectedEdgeId != null) {
+    document.getElementById("ed-"+selectedEdgeId)?.classList.remove("edge-selected");
+    selectedEdgeId = null;
+  }
+}
+
+// Click on blank canvas clears edge selection
+canvasEl.addEventListener("click", e => {
+  if (!e.target.closest(".edge-group")) clearEdgeSelection();
+});
 
 /* ── Rubber-band multi-select ────────────────────────────────── */
 let selStart = null;
@@ -1385,27 +1509,51 @@ function portPos(nodeId, side) {
 
 function startEdgeDrag(fromId, e) {
   connSrc = fromId;
-  banner.style.display = "block";
+  clearEdgeSelection();
+
+  // If this node is part of a multi-selection (≥2), we'll connect ALL selected nodes
+  const isGroupDrag = selectedNodes.has(fromId) && selectedNodes.size >= 2;
+  const groupIds = isGroupDrag ? [...selectedNodes] : [fromId];
+
   const rect = canvasEl.getBoundingClientRect();
   const side = e.target.dataset.side || "bottom";
   const [px, py] = portPos(fromId, side);
   dragLine.setAttribute("x1", px); dragLine.setAttribute("y1", py);
-  dragLine.setAttribute("x2", e.clientX-rect.left); dragLine.setAttribute("y2", e.clientY-rect.top);
+  dragLine.setAttribute("x2", (e.clientX - rect.left) / zoomLevel);
+  dragLine.setAttribute("y2", (e.clientY - rect.top)  / zoomLevel);
   dragLine.style.display = "block";
 
+  if (isGroupDrag) {
+    banner.textContent = `⇄ Drop on a node to connect all ${groupIds.length} selected nodes to it`;
+  } else {
+    banner.textContent = "⇄ Drag from a port to connect — Esc to cancel";
+  }
+  banner.style.display = "block";
+
   function onMove(me) {
-    dragLine.setAttribute("x2", me.clientX-rect.left);
-    dragLine.setAttribute("y2", me.clientY-rect.top);
+    dragLine.setAttribute("x2", (me.clientX - rect.left) / zoomLevel);
+    dragLine.setAttribute("y2", (me.clientY - rect.top)  / zoomLevel);
   }
   function onUp(me) {
     dragLine.style.display = "none";
     banner.style.display = "none";
+    banner.textContent = "⇄ Drag from a port to connect — Esc to cancel";
     connSrc = null;
     document.removeEventListener("mousemove", onMove);
     document.removeEventListener("mouseup", onUp);
+
     const hit = document.elementFromPoint(me.clientX, me.clientY)?.closest(".node");
-    if (hit && hit.id !== "nd-"+fromId) {
-      addEdge(fromId, hit.id.replace("nd-",""));
+    if (hit) {
+      const toId = hit.id.replace("nd-","");
+      if (isGroupDrag) {
+        // Connect every selected node → target (skip target itself)
+        groupIds.forEach(gid => {
+          if (gid !== toId) addEdge(gid, toId);
+        });
+        if (groupIds.length > 1) setStatus(`Connected ${groupIds.filter(g=>g!==toId).length} nodes → target`);
+      } else {
+        if (toId !== fromId) addEdge(fromId, toId);
+      }
     }
   }
   document.addEventListener("mousemove", onMove);
@@ -1719,8 +1867,14 @@ window.overlayClose = (e, id) => { if (e.target.classList.contains("overlay")) c
 document.addEventListener("keydown", e=>{
   if (e.key === "Escape") {
     if (connecting) toggleConnect();
-    if (dragLine.style.display !== "none") { dragLine.style.display = "none"; connSrc = null; }
+    if (dragLine.style.display !== "none") {
+      dragLine.style.display = "none";
+      banner.style.display = "none";
+      banner.textContent = "⇄ Drag from a port to connect — Esc to cancel";
+      connSrc = null;
+    }
     selectedNodes.clear(); syncSelection();
+    clearEdgeSelection();
   }
   // Delete or Backspace removes all selected nodes (when not in an input)
   if ((e.key === "Delete" || e.key === "Backspace") && !e.target.matches("input")) {
