@@ -47,10 +47,12 @@ SENTINEL = "📊 [ORG_CHART_DATA_v1]"
 STATE_TTL_SECONDS = 600
 
 
-def _require_env(name: str, value: str) -> str:
-    if not value:
-        raise RuntimeError(f"Missing required env var: {name}")
-    return value
+def _missing_env(name: str) -> JSONResponse:
+    """Return a clear JSON error instead of crashing the server."""
+    return JSONResponse(
+        {"error": f"Server misconfiguration: env var {name} is not set."},
+        status_code=500,
+    )
 
 
 # ──────────────────────────────────────────────────────────────
@@ -220,24 +222,22 @@ def debug_context(request: Request):
 # ──────────────────────────────────────────────────────────────
 @app.get("/oauth/start")
 def oauth_start():
-    _require_env("BASE_URL", BASE_URL)
-    _require_env("PIPEDRIVE_CLIENT_ID", PIPEDRIVE_CLIENT_ID)
+    if not BASE_URL:
+        return _missing_env("BASE_URL")
+    if not PIPEDRIVE_CLIENT_ID:
+        return _missing_env("PIPEDRIVE_CLIENT_ID")
 
     redirect_uri = f"{BASE_URL}/oauth/callback"
-
     state = secrets.token_urlsafe(32)
     save_oauth_state(state)
 
-    params = urlencode(
-        {
-            "client_id": PIPEDRIVE_CLIENT_ID,
-            "redirect_uri": redirect_uri,
-            "response_type": "code",
-            "state": state,
-        }
-    )
+    params = urlencode({
+        "client_id": PIPEDRIVE_CLIENT_ID,
+        "redirect_uri": redirect_uri,
+        "response_type": "code",
+        "state": state,
+    })
 
-    # ✅ THIS is the missing piece: send the user to Pipedrive OAuth consent screen
     return RedirectResponse(f"https://oauth.pipedrive.com/oauth/authorize?{params}")
 
 
@@ -248,13 +248,15 @@ def oauth_callback(request: Request):
 
     if not state or not consume_oauth_state(state):
         return JSONResponse({"error": "Invalid or expired state."}, status_code=400)
-
     if not code:
         return JSONResponse({"error": "No authorisation code returned."}, status_code=400)
 
-    _require_env("BASE_URL", BASE_URL)
-    _require_env("PIPEDRIVE_CLIENT_ID", PIPEDRIVE_CLIENT_ID)
-    _require_env("PIPEDRIVE_CLIENT_SECRET", PIPEDRIVE_CLIENT_SECRET)
+    if not BASE_URL:
+        return _missing_env("BASE_URL")
+    if not PIPEDRIVE_CLIENT_ID:
+        return _missing_env("PIPEDRIVE_CLIENT_ID")
+    if not PIPEDRIVE_CLIENT_SECRET:
+        return _missing_env("PIPEDRIVE_CLIENT_SECRET")
 
     redirect_uri = f"{BASE_URL}/oauth/callback"
 
@@ -286,8 +288,6 @@ def oauth_callback(request: Request):
     company_id = str(me.json()["data"]["company_id"])
 
     save_tokens(company_id, access_token, refresh_token, expires_in)
-
-    # ✅ Serve success page correctly
     return FileResponse(html_file("oauth_success.html"))
 
 
