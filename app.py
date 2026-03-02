@@ -99,15 +99,19 @@ def save_oauth_state(state):
         _state_store[state] = int(time.time()) + 600
 
 
-def consume_oauth_state(state):
+def consume_oauth_state(state: str) -> bool:
     key = f"oc:state:{state}"
-    result = _redis(["GETDEL", key])
-    if result is not None:
-        return result == "1"
+
+    val = _redis(["GET", key])
+    if val is not None:
+        _redis(["DEL", key])
+        return val == "1"
+
     exp = _state_store.pop(state, None)
     if exp is not None:
         return int(time.time()) < exp
-    return bool(state)
+
+    return False
 
 
 def refresh_access_token(company_id: str, refresh_token: str):
