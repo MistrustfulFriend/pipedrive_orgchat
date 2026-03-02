@@ -889,32 +889,37 @@
 (async () => {
 
 /* ── SDK + Params ─────────────────────────────────────────────── */
-// Always read URL params first as reliable fallback
-const _p    = new URLSearchParams(location.search);
+const _p      = new URLSearchParams(location.search);
 let companyId = _p.get("companyId") || "";
 let orgId     = _p.get("id")        || "";
 let orgName   = _p.get("name")      || "";
 let sdk       = null;
 
-// Only attempt SDK init if we look like we're inside Pipedrive
-// (i.e. loaded in an iframe with a parent origin)
+// When loaded inside Pipedrive as a custom modal, the SDK handshake
+// MUST complete — Pipedrive waits for it before showing the iframe.
+// Never timeout or skip it when inside an iframe.
 try {
-  const isIframe = window.self !== window.top;
-  if (isIframe) {
-    // Timeout wrapper — SDK can hang indefinitely if not in Pipedrive
-    sdk = await Promise.race([
-      AppExtensionsSDK.initialize({ identifier: "ce57ff29-4b39-42a7-9868-f10a99f5d8a9" }),
-      new Promise((_, rej) => setTimeout(() => rej(new Error("SDK timeout")), 3000))
-    ]);
-    const u = sdk.userIdentifier || {};
-    // SDK values take priority over URL params
-    if (u.companyId) companyId = String(u.companyId);
-    if (u.id)        orgId     = String(u.id);
-    if (u.name)      orgName   = String(u.name);
-  }
+  sdk = await AppExtensionsSDK.initialize({ identifier: "ce57ff29-4b39-42a7-9868-f10a99f5d8a9" });
+
+  // Get context from SDK — for a custom modal opened from an org page,
+  // userContext contains the current organisation's data
+  const ctx = sdk.userContext || {};
+  const u   = sdk.userIdentifier || {};
+
+  // companyId comes from userIdentifier
+  if (u.companyId) companyId = String(u.companyId);
+
+  // orgId/orgName come from the record context when opened on an org page
+  if (ctx.id)   orgId   = String(ctx.id);
+  if (ctx.name) orgName = String(ctx.name);
+
+  // Also check userIdentifier for id/name as fallback
+  if (!orgId   && u.id)   orgId   = String(u.id);
+  if (!orgName && u.name) orgName = String(u.name);
+
 } catch(e) {
-  // SDK failed or timed out — URL params are our source of truth
-  // This is fine: direct /panel?companyId=X access works without SDK
+  // Not inside Pipedrive — running standalone (direct URL access)
+  // URL params are used, already read above
   sdk = null;
 }
 
