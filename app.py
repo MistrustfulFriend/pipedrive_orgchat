@@ -44,6 +44,34 @@ UPSTASH_TOKEN = os.getenv("UPSTASH_REDIS_REST_TOKEN", "").strip()
 STATIC_DIR = str(BASE_DIR / "static")
 
 SENTINEL = "📊 [ORG_CHART_DATA_v1]"
+# Strip HTML tags so we can detect our sentinel even after Pipedrive
+# reformats the note content as rich text (e.g. wraps in <p>…</p>).
+import re as _re
+
+def _strip_html(text: str) -> str:
+    return _re.sub(r"<[^>]+>", "", text or "").replace("&nbsp;", " ").replace("&amp;", "&").replace("&#39;", "'").strip()
+
+def _note_contains_sentinel(content: str) -> bool:
+    """Return True if the note content contains our sentinel marker,
+    regardless of HTML wrapping that Pipedrive may have added."""
+    return SENTINEL in _strip_html(content)
+
+def _extract_chart_from_note(content: str) -> dict | None:
+    """Parse our sentinel-prefixed note, tolerating HTML wrapper tags."""
+    plain = _strip_html(content)
+    if SENTINEL not in plain:
+        return None
+    # Everything after the sentinel line
+    after = plain[plain.index(SENTINEL) + len(SENTINEL):].strip()
+    lines = after.split("\n", 1)
+    chart_name = "Org Chart"
+    chart_json = ""
+    if lines and lines[0].startswith("Name: "):
+        chart_name = lines[0][6:].strip()
+        chart_json = lines[1].strip() if len(lines) > 1 else ""
+    else:
+        chart_json = after.strip()
+    return {"chart": chart_json, "chartName": chart_name}
 STATE_TTL_SECONDS = 600
 
 
@@ -359,7 +387,7 @@ async def orgchart_save(payload: dict):
     )
     if nr.status_code == 200:
         for note in (nr.json().get("data") or []):
-            if (note.get("content") or "").startswith(SENTINEL):
+            if _note_contains_sentinel(note.get("content") or ""):
                 existing_id = note["id"]
                 break
 
@@ -377,7 +405,9 @@ async def orgchart_save(payload: dict):
             json={
                 "content": note_body,
                 "org_id": int(org_id),
-                "pinned_to_organization_flag": 1,
+                # Not pinned — pinned notes are more visible but users
+                # may not want this auto-pinned note cluttering the top.
+                "pinned_to_organization_flag": 0,
             },
             timeout=15,
         )
@@ -408,11 +438,9 @@ def orgchart_load(orgId: str = "", companyId: str = ""):
 
     for note in (r.json().get("data") or []):
         content = note.get("content") or ""
-        if content.startswith(SENTINEL):
-            lines = content.split("\n", 2)
-            chart_name = lines[1].replace("Name: ", "").strip() if len(lines) > 1 else "Org Chart"
-            chart_json = lines[2].strip() if len(lines) > 2 else ""
-            return {"chart": chart_json, "chartName": chart_name}
+        result = _extract_chart_from_note(content)
+        if result:
+            return result
 
     return {}
 

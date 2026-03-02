@@ -658,6 +658,52 @@
     .btn-ok.confirm { background: var(--green2); color: #fff; border-color: var(--green2); }
     .btn-ok.confirm:hover { background: var(--green); }
 
+    /* ─── Zoom controls ────────────────────────────────────────── */
+    #zoom-controls {
+      position: absolute;
+      bottom: 14px;
+      right: 14px;
+      display: flex;
+      flex-direction: column;
+      gap: 3px;
+      z-index: 25;
+    }
+    .zoom-btn {
+      width: 30px; height: 30px;
+      background: var(--bg2);
+      border: 1px solid var(--border);
+      border-radius: 6px;
+      display: flex; align-items: center; justify-content: center;
+      cursor: pointer;
+      font-size: 16px;
+      font-weight: 600;
+      color: var(--text2);
+      box-shadow: 0 1px 4px rgba(0,0,0,.1);
+      transition: all .12s;
+      line-height: 1;
+      user-select: none;
+    }
+    .zoom-btn:hover { background: var(--bg4); color: var(--text); border-color: var(--border2); }
+    #zoom-label {
+      width: 30px; height: 22px;
+      background: var(--bg3);
+      border: 1px solid var(--border);
+      border-radius: 5px;
+      display: flex; align-items: center; justify-content: center;
+      font-size: 9px; font-weight: 600; font-family: var(--mono);
+      color: var(--text3);
+    }
+
+    /* ─── Selection box ────────────────────────────────────────── */
+    #sel-box {
+      position: absolute;
+      border: 1.5px dashed var(--blue);
+      background: var(--blueDim);
+      pointer-events: none;
+      display: none;
+      z-index: 3;
+    }
+
     ::-webkit-scrollbar { width: 4px; }
     ::-webkit-scrollbar-track { background: transparent; }
     ::-webkit-scrollbar-thumb { background: var(--border2); border-radius: 2px; }
@@ -780,9 +826,11 @@
     <div class="sb-section">Tips</div>
     <div style="padding:6px 10px 10px; font-size:11px; color:var(--text3); line-height:1.6;">
       • Drag nodes to reposition<br>
-      • Hover node → drag any port to connect<br>
-      • Connections route left/right or top/bottom automatically<br>
-      • Click a connection line to delete it<br>
+      • Shift+click or drag on canvas to multi-select<br>
+      • Delete key removes selected nodes<br>
+      • Hover a node → drag any port to connect<br>
+      • Hover a connection → click ✕ to delete it<br>
+      • Scroll wheel or +/− to zoom<br>
       • Save stores chart on org note
     </div>
   </div>
@@ -814,6 +862,16 @@
     <div id="nodes-layer"></div>
 
     <div id="connect-banner">⇄ Drag from a port to connect — Esc to cancel</div>
+
+    <!-- Zoom controls -->
+    <div id="zoom-controls">
+      <button class="zoom-btn" id="zoom-in-btn" title="Zoom in">+</button>
+      <div id="zoom-label">100%</div>
+      <button class="zoom-btn" id="zoom-out-btn" title="Zoom out">−</button>
+    </div>
+
+    <!-- Selection rubber-band box -->
+    <div id="sel-box"></div>
 
     <!-- Not-connected screen -->
     <div id="connect-screen">
@@ -958,6 +1016,9 @@ let activeTab   = "search";
 let dirty       = false;
 let saveTimer   = null;
 let orgPickerOpen = false;
+let selectedNodes = new Set(); // multi-select
+let zoomLevel   = 1.0;  // canvas zoom
+let panX = 0, panY = 0; // canvas pan offset
 
 const canvasEl   = document.getElementById("canvas-wrap");
 const nodesEl    = document.getElementById("nodes-layer");
@@ -967,10 +1028,38 @@ const emptyEl    = document.getElementById("empty-state");
 const banner     = document.getElementById("connect-banner");
 const statusTxt  = document.getElementById("status-text");
 const statusDot  = document.getElementById("status-dot");
+const selBox     = document.getElementById("sel-box");
+
+// Wrap nodes and SVG in a transform layer
+function applyCanvasTransform() {
+  nodesEl.style.transform = `translate(${panX}px,${panY}px) scale(${zoomLevel})`;
+  nodesEl.style.transformOrigin = "0 0";
+  const svgLayer = document.getElementById("svg-layer");
+  svgLayer.style.transform = `translate(${panX}px,${panY}px) scale(${zoomLevel})`;
+  svgLayer.style.transformOrigin = "0 0";
+  document.getElementById("zoom-label").textContent = Math.round(zoomLevel*100)+"%";
+}
+
+function zoomIn()  { zoomLevel = Math.min(2.0, zoomLevel + 0.1); applyCanvasTransform(); }
+function zoomOut() { zoomLevel = Math.max(0.25, zoomLevel - 0.1); applyCanvasTransform(); }
+
+document.getElementById("zoom-in-btn").addEventListener("click", zoomIn);
+document.getElementById("zoom-out-btn").addEventListener("click", zoomOut);
+
+// Mouse wheel zoom
+canvasEl.addEventListener("wheel", e => {
+  e.preventDefault();
+  if (e.deltaY < 0) zoomIn(); else zoomOut();
+}, { passive: false });
+
+applyCanvasTransform();
 
 /* ── Prefill org if passed via params ────────────────────────── */
 if (orgId && orgName) {
   document.getElementById("org-picker-label").textContent = orgName;
+  await loadChart();
+} else if (orgId) {
+  // Have id but not name — load chart anyway, name will appear after load
   await loadChart();
 }
 
@@ -1076,13 +1165,13 @@ function makeEdgeEl(e) {
   delG.appendChild(circle);
   delG.appendChild(x1);
   delG.appendChild(x2);
-  delG.addEventListener("click", (ev) => { ev.stopPropagation(); deleteEdge(e.id); });
+    delG.addEventListener("click", (ev) => { ev.stopPropagation(); deleteEdge(e.id); });
 
   g.appendChild(hit);
   g.appendChild(path);
   g.appendChild(delG);
-  // Also allow clicking anywhere on the group (hit area) to delete
-  g.addEventListener("click", () => deleteEdge(e.id));
+  // NOTE: We do NOT add a click handler to `g` itself — that caused
+  // accidental deletions when hovering. Only the explicit ✕ button deletes.
   edgesEl.appendChild(g);
 }
 
@@ -1157,33 +1246,120 @@ function refreshNodeEdges(nid) {
   });
 }
 
-/* ── Drag nodes ──────────────────────────────────────────────── */
+/* ── Rubber-band multi-select ────────────────────────────────── */
+let selStart = null;
+
+canvasEl.addEventListener("mousedown", e => {
+  if (connecting) return;
+  if (e.target.closest(".node") || e.target.closest("#zoom-controls")) return;
+  if (e.target.closest("#edges-g")) return;
+  // Start rubber-band
+  const rect = canvasEl.getBoundingClientRect();
+  selStart = { x: e.clientX - rect.left, y: e.clientY - rect.top };
+  selBox.style.left   = selStart.x + "px";
+  selBox.style.top    = selStart.y + "px";
+  selBox.style.width  = "0px";
+  selBox.style.height = "0px";
+  selBox.style.display = "block";
+  // Clear selection unless shift
+  if (!e.shiftKey) { selectedNodes.clear(); syncSelection(); }
+});
+
+document.addEventListener("mousemove", e => {
+  if (!selStart) return;
+  const rect = canvasEl.getBoundingClientRect();
+  const cx = e.clientX - rect.left, cy = e.clientY - rect.top;
+  const x = Math.min(selStart.x, cx), y = Math.min(selStart.y, cy);
+  const w = Math.abs(cx - selStart.x), h = Math.abs(cy - selStart.y);
+  selBox.style.left = x+"px"; selBox.style.top = y+"px";
+  selBox.style.width = w+"px"; selBox.style.height = h+"px";
+  // Highlight nodes inside rubber-band (account for zoom/pan)
+  const selRect = { x, y, w, h };
+  Object.values(nodes).forEach(n => {
+    const nx = n.x * zoomLevel + panX, ny = n.y * zoomLevel + panY;
+    const nw = nodeW(n) * zoomLevel, nh = nodeH(n) * zoomLevel;
+    const inside = nx < selRect.x + selRect.w && nx + nw > selRect.x &&
+                   ny < selRect.y + selRect.h && ny + nh > selRect.y;
+    const el = document.getElementById("nd-"+n.id);
+    if (el) el.classList.toggle("selected", inside);
+  });
+});
+
+document.addEventListener("mouseup", e => {
+  if (!selStart) return;
+  selBox.style.display = "none";
+  // Commit selection
+  Object.values(nodes).forEach(n => {
+    const el = document.getElementById("nd-"+n.id);
+    if (el && el.classList.contains("selected")) selectedNodes.add(n.id);
+  });
+  selStart = null;
+});
+
+function syncSelection() {
+  Object.keys(nodes).forEach(nid => {
+    const el = document.getElementById("nd-"+nid);
+    if (el) el.classList.toggle("selected", selectedNodes.has(nid));
+  });
+}
+
+// Toggle node selection on click (without dragging)
+function onNodeClick(nid, e) {
+  if (e.shiftKey) {
+    if (selectedNodes.has(nid)) selectedNodes.delete(nid);
+    else selectedNodes.add(nid);
+  } else {
+    selectedNodes.clear();
+    selectedNodes.add(nid);
+  }
+  syncSelection();
+}
 function dragNode(el, n) {
-  let ox, oy, nx0, ny0, active = false;
+  let ox, oy, nx0, ny0, active = false, didMove = false;
+  let groupSnap = {};
 
   el.addEventListener("mousedown", e => {
     if (connecting) return;
     if (e.target.closest(".nha-btn")) return;
     if (e.target.closest(".port")) return;
     e.preventDefault();
-    active = true; ox = e.clientX; oy = e.clientY; nx0 = n.x; ny0 = n.y;
+    active = true; didMove = false;
+    ox = e.clientX; oy = e.clientY; nx0 = n.x; ny0 = n.y;
+    if (selectedNodes.has(n.id)) {
+      groupSnap = {};
+      selectedNodes.forEach(nid => { if (nodes[nid]) groupSnap[nid] = {x: nodes[nid].x, y: nodes[nid].y}; });
+    }
     el.classList.add("dragging");
   });
 
   document.addEventListener("mousemove", e => {
     if (!active) return;
-    n.x = nx0 + e.clientX - ox;
-    n.y = ny0 + e.clientY - oy;
-    el.style.left = n.x+"px";
-    el.style.top  = n.y+"px";
-    refreshNodeEdges(n.id);
+    didMove = true;
+    const dx = (e.clientX - ox) / zoomLevel;
+    const dy = (e.clientY - oy) / zoomLevel;
+    if (selectedNodes.has(n.id) && Object.keys(groupSnap).length > 1) {
+      selectedNodes.forEach(nid => {
+        const snap = groupSnap[nid];
+        if (!snap) return;
+        nodes[nid].x = snap.x + dx;
+        nodes[nid].y = snap.y + dy;
+        const nel = document.getElementById("nd-"+nid);
+        if (nel) { nel.style.left = nodes[nid].x+"px"; nel.style.top = nodes[nid].y+"px"; }
+        refreshNodeEdges(nid);
+      });
+    } else {
+      n.x = nx0 + dx; n.y = ny0 + dy;
+      el.style.left = n.x+"px"; el.style.top = n.y+"px";
+      refreshNodeEdges(n.id);
+    }
   });
 
-  document.addEventListener("mouseup", () => {
+  document.addEventListener("mouseup", e => {
     if (!active) return;
-    active = false;
+    active = false; groupSnap = {};
     el.classList.remove("dragging");
-    markDirty();
+    if (!didMove) onNodeClick(n.id, e);
+    else markDirty();
   });
 }
 
@@ -1295,7 +1471,14 @@ window.confirmEdit = function() {
 };
 
 /* ── Add modal ───────────────────────────────────────────────── */
-window.openAddModal = function() {
+window.openAddModal = function(preOrgId, preOrgName) {
+  // If called from an org context (e.g. opened while viewing a specific org),
+  // auto-select that org so the chart saves to the right place.
+  if (preOrgId && preOrgId !== orgId) {
+    orgId   = String(preOrgId);
+    orgName = preOrgName || orgId;
+    document.getElementById("org-picker-label").textContent = orgName;
+  }
   selectedPerson = null;
   document.getElementById("ps-input").value = "";
   document.getElementById("ps-results").style.display = "none";
@@ -1537,6 +1720,14 @@ document.addEventListener("keydown", e=>{
   if (e.key === "Escape") {
     if (connecting) toggleConnect();
     if (dragLine.style.display !== "none") { dragLine.style.display = "none"; connSrc = null; }
+    selectedNodes.clear(); syncSelection();
+  }
+  // Delete or Backspace removes all selected nodes (when not in an input)
+  if ((e.key === "Delete" || e.key === "Backspace") && !e.target.matches("input")) {
+    if (selectedNodes.size > 0) {
+      [...selectedNodes].forEach(nid => deleteNode(nid));
+      selectedNodes.clear();
+    }
   }
 });
 
