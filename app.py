@@ -301,7 +301,13 @@ def oauth_callback(request: Request):
         headers={"Authorization": f"Bearer {access_token}"},
         timeout=15,
     )
-    me.raise_for_status()
+
+    if me.status_code != 200:
+        return JSONResponse(
+            {"error": "Pipedrive /users/me failed", "status": me.status_code, "body": me.text},
+            status_code=400,
+        )
+
     company_id = str(me.json()["data"]["company_id"])
 
     save_tokens(company_id, access_token, refresh_token, expires_in)
