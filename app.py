@@ -419,6 +419,36 @@ async def orgchart_delete(orgId: str = "", companyId: str = ""):
     return {"ok": True}
 
 
+@app.get("/api/person/deals")
+def person_deals(personId: str = "", companyId: str = ""):
+    """Return all deals for a Pipedrive person, grouped by status."""
+    if not personId or not companyId:
+        return JSONResponse({"error": "Missing personId or companyId"}, status_code=400)
+    access_token = get_valid_token(companyId)
+    if not access_token:
+        return JSONResponse({"error": "Not connected"}, status_code=401)
+    headers = {"Authorization": f"Bearer {access_token}"}
+    r = requests.get(
+        f"https://api.pipedrive.com/v1/persons/{personId}/deals",
+        headers=headers,
+        params={"limit": 50, "status": "all_not_deleted"},
+        timeout=15,
+    )
+    if r.status_code != 200:
+        return {"deals": []}
+    deals = []
+    for d in (r.json().get("data") or []):
+        deals.append({
+            "id":       d.get("id"),
+            "title":    d.get("title", "Untitled deal"),
+            "status":   d.get("status", "open"),   # open | won | lost
+            "value":    d.get("value"),
+            "currency": d.get("currency", ""),
+            "close_time": d.get("close_time") or d.get("won_time") or d.get("lost_time") or "",
+        })
+    return {"deals": deals}
+
+
 @app.get("/api/orgs/search")
 def orgs_search(q: str = "", companyId: str = ""):
     access_token = get_valid_token(companyId)

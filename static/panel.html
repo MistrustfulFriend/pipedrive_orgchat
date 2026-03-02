@@ -703,6 +703,132 @@
       z-index: 3;
     }
 
+    /* ─── Add dropdown ─────────────────────────────────────── */
+    .add-dropdown {
+      position: absolute;
+      top: calc(100% + 4px);
+      left: 0;
+      width: 210px;
+      background: var(--bg2);
+      border: 1px solid var(--border);
+      border-radius: var(--radius);
+      box-shadow: 0 8px 24px rgba(0,0,0,.12);
+      z-index: 50;
+      overflow: hidden;
+    }
+    .add-dd-item {
+      display: flex; align-items: center; gap: 10px;
+      padding: 9px 12px; cursor: pointer;
+      border-bottom: 1px solid var(--border);
+      transition: background .1s;
+    }
+    .add-dd-item:last-child { border-bottom: none; }
+    .add-dd-item:hover { background: var(--bg3); }
+    .add-dd-item svg { width:15px;height:15px;stroke:var(--text2);fill:none;stroke-width:2;stroke-linecap:round;stroke-linejoin:round;flex-shrink:0; }
+    .add-dd-label { font-size:12px; font-weight:500; color:var(--text); }
+    .add-dd-sub   { font-size:10px; color:var(--text3); }
+
+    /* ─── Deal badges on nodes ──────────────────────────── */
+    .node-deals {
+      display: flex; flex-wrap: wrap; gap: 3px;
+      padding: 5px 10px 7px;
+      border-top: 1px solid var(--border);
+    }
+    .deal-badge {
+      display: inline-flex; align-items: center; gap: 3px;
+      padding: 2px 6px;
+      border-radius: 10px;
+      font-size: 10px; font-weight: 600;
+      cursor: pointer;
+      transition: filter .12s;
+      white-space: nowrap;
+      max-width: 130px;
+      overflow: hidden; text-overflow: ellipsis;
+    }
+    .deal-badge:hover { filter: brightness(0.92); }
+    .deal-badge.won  { background: rgba(26,127,60,0.12); color: var(--green); border: 1px solid rgba(26,127,60,0.25); }
+    .deal-badge.lost { background: rgba(220,38,38,0.08); color: var(--red);   border: 1px solid rgba(220,38,38,0.2); }
+    .deal-badge.open { background: rgba(24,100,212,0.10); color: var(--blue); border: 1px solid rgba(24,100,212,0.22); }
+    .deal-badge svg  { width:8px;height:8px;stroke:currentColor;fill:none;stroke-width:2.5;flex-shrink:0; }
+    .deal-badge-more {
+      display: inline-flex; align-items: center;
+      padding: 2px 6px; border-radius: 10px;
+      font-size: 10px; font-weight: 600; cursor: pointer;
+      background: var(--bg4); color: var(--text2);
+      border: 1px solid var(--border);
+      transition: background .12s;
+    }
+    .deal-badge-more:hover { background: var(--bg3); }
+
+    /* ─── Deal popover ──────────────────────────────────── */
+    #deal-popover {
+      position: fixed;
+      background: var(--bg2);
+      border: 1px solid var(--border);
+      border-radius: 10px;
+      width: 280px;
+      box-shadow: 0 8px 32px rgba(0,0,0,.18);
+      z-index: 200;
+      overflow: hidden;
+      animation: fadeIn .12s ease;
+    }
+    .dp-hd {
+      display: flex; align-items: center; gap: 8px;
+      padding: 10px 12px 8px;
+      border-bottom: 1px solid var(--border);
+    }
+    .dp-name { font-size: 12px; font-weight: 600; flex:1; }
+    .dp-close {
+      width:20px;height:20px;display:flex;align-items:center;justify-content:center;
+      border:none;background:none;cursor:pointer;color:var(--text3);border-radius:4px;
+    }
+    .dp-close:hover { background:var(--bg4);color:var(--text); }
+    .dp-close svg { width:12px;height:12px;stroke:currentColor;fill:none;stroke-width:2;stroke-linecap:round; }
+    .dp-list { max-height: 260px; overflow-y: auto; }
+    .dp-deal {
+      display: flex; align-items: center; gap: 8px;
+      padding: 8px 12px; border-bottom: 1px solid var(--border);
+      text-decoration: none; cursor: pointer;
+      transition: background .1s;
+    }
+    .dp-deal:last-child { border-bottom: none; }
+    .dp-deal:hover { background: var(--bg3); }
+    .dp-dot { width:8px;height:8px;border-radius:50%;flex-shrink:0; }
+    .dp-dot.won  { background: var(--green); }
+    .dp-dot.lost { background: var(--red); }
+    .dp-dot.open { background: var(--blue); }
+    .dp-info { flex:1; min-width:0; }
+    .dp-title { font-size:12px;font-weight:500;color:var(--text);white-space:nowrap;overflow:hidden;text-overflow:ellipsis; }
+    .dp-meta  { font-size:10px;color:var(--text3);margin-top:1px; }
+    .dp-arrow { color:var(--text3); font-size:11px; flex-shrink:0; }
+    .dp-loading { padding:16px;text-align:center;font-size:12px;color:var(--text3); }
+
+    /* ─── Sidebar deals panel ───────────────────────────── */
+    .sb-deals-empty { padding:12px 10px;font-size:11px;color:var(--text3);text-align:center; }
+    .sb-deal-person {
+      padding: 7px 10px 4px;
+    }
+    .sb-deal-person-name {
+      font-size:11px;font-weight:600;color:var(--text2);
+      white-space:nowrap;overflow:hidden;text-overflow:ellipsis;
+      margin-bottom:3px;
+    }
+    .sb-deal-row {
+      display:flex;align-items:center;gap:6px;
+      padding:3px 0;
+      cursor:pointer;
+      border-radius:4px;
+      padding-left:2px;
+      transition:background .1s;
+    }
+    .sb-deal-row:hover { background:var(--bg3); }
+    .sb-deal-dot { width:7px;height:7px;border-radius:50%;flex-shrink:0; }
+    .sb-deal-dot.won  { background:var(--green); }
+    .sb-deal-dot.lost { background:var(--red); }
+    .sb-deal-dot.open { background:var(--blue); }
+    .sb-deal-title { font-size:11px;color:var(--text);flex:1;white-space:nowrap;overflow:hidden;text-overflow:ellipsis; }
+    .sb-deal-val   { font-size:10px;color:var(--text3);flex-shrink:0; }
+
     ::-webkit-scrollbar { width: 4px; }
     ::-webkit-scrollbar-track { background: transparent; }
     ::-webkit-scrollbar-thumb { background: var(--border2); border-radius: 2px; }
@@ -738,21 +864,33 @@
 
   <div class="tl-sep"></div>
 
-  <button class="tl-btn" onclick="openAddModal()">
-    <svg viewBox="0 0 24 24"><path d="M20 21v-2a4 4 0 00-4-4H8a4 4 0 00-4 4v2"/><circle cx="12" cy="7" r="4"/><line x1="19" y1="8" x2="19" y2="14"/><line x1="22" y1="11" x2="16" y2="11"/></svg>
-    Add Person
-  </button>
-
-  <button class="tl-btn" onclick="addPlaceholder()">
-    <svg viewBox="0 0 24 24"><circle cx="12" cy="8" r="4" stroke-dasharray="2.5 2"/><path d="M6 20v-2a4 4 0 014-4h4a4 4 0 014 4v2" stroke-dasharray="2.5 2"/></svg>
-    Placeholder
-  </button>
-
-  <div class="tl-sep"></div>
+  <!-- + Add dropdown -->
+  <div style="position:relative">
+    <button class="tl-btn" id="add-btn" onclick="toggleAddDropdown()">
+      <svg viewBox="0 0 24 24"><line x1="12" y1="5" x2="12" y2="19"/><line x1="5" y1="12" x2="19" y2="12"/></svg>
+      Add
+      <svg viewBox="0 0 24 24" style="width:10px;height:10px;margin-left:2px"><polyline points="6 9 12 15 18 9"/></svg>
+    </button>
+    <div class="add-dropdown" id="add-dropdown" style="display:none">
+      <div class="add-dd-item" onclick="openAddModal();closeAddDropdown()">
+        <svg viewBox="0 0 24 24"><path d="M20 21v-2a4 4 0 00-4-4H8a4 4 0 00-4 4v2"/><circle cx="12" cy="7" r="4"/></svg>
+        <div><div class="add-dd-label">Pipedrive person</div><div class="add-dd-sub">Search &amp; link</div></div>
+      </div>
+      <div class="add-dd-item" onclick="addPlaceholder();closeAddDropdown()">
+        <svg viewBox="0 0 24 24"><circle cx="12" cy="8" r="4" stroke-dasharray="2.5 2"/><path d="M6 20v-2a4 4 0 014-4h4a4 4 0 014 4v2" stroke-dasharray="2.5 2"/></svg>
+        <div><div class="add-dd-label">Placeholder</div><div class="add-dd-sub">Open position</div></div>
+      </div>
+    </div>
+  </div>
 
   <button class="tl-btn" onclick="fitView()">
     <svg viewBox="0 0 24 24"><path d="M8 3H5a2 2 0 00-2 2v3"/><path d="M21 8V5a2 2 0 00-2-2h-3"/><path d="M3 16v3a2 2 0 002 2h3"/><path d="M16 21h3a2 2 0 002-2v-3"/></svg>
     Fit
+  </button>
+
+  <button class="tl-btn" onclick="refreshDeals()">
+    <svg viewBox="0 0 24 24"><polyline points="23 4 23 10 17 10"/><path d="M20.49 15a9 9 0 1 1-2.12-9.36L23 10"/></svg>
+    Refresh deals
   </button>
 
   <div class="tl-sep"></div>
@@ -775,51 +913,27 @@
 
   <!-- Sidebar -->
   <div id="sidebar">
-    <div class="sb-section">Add to canvas</div>
-
-    <div class="palette-node" onclick="openAddModal()">
-      <div class="palette-icon person">
-        <svg viewBox="0 0 24 24"><path d="M20 21v-2a4 4 0 00-4-4H8a4 4 0 00-4 4v2"/><circle cx="12" cy="7" r="4"/></svg>
-      </div>
-      <div>
-        <div class="palette-label">Pipedrive person</div>
-        <div class="palette-sublabel">Search & link</div>
-      </div>
-    </div>
-
-    <div class="palette-node" onclick="addPlaceholder()">
-      <div class="palette-icon placeholder">
-        <svg viewBox="0 0 24 24"><circle cx="12" cy="8" r="4" stroke-dasharray="2.5 2"/><path d="M6 20v-2a4 4 0 014-4h4a4 4 0 014 4v2" stroke-dasharray="2.5 2"/></svg>
-      </div>
-      <div>
-        <div class="palette-label">Placeholder</div>
-        <div class="palette-sublabel">Unknown person</div>
-      </div>
+    <div class="sb-section">Deals</div>
+    <div id="sb-deals-body">
+      <div class="sb-deals-empty">Load a chart to see deals</div>
     </div>
 
     <div class="sb-divider"></div>
-    <div class="sb-section">Actions</div>
-
+    <div class="sb-section">Canvas</div>
     <button class="sb-btn" onclick="fitView()">
       <svg viewBox="0 0 24 24"><path d="M8 3H5a2 2 0 00-2 2v3"/><path d="M21 8V5a2 2 0 00-2-2h-3"/><path d="M3 16v3a2 2 0 002 2h3"/><path d="M16 21h3a2 2 0 002-2v-3"/></svg>
       Fit to screen
     </button>
-
     <button class="sb-btn" onclick="clearAll()">
       <svg viewBox="0 0 24 24"><polyline points="3 6 5 6 21 6"/><path d="M19 6l-1 14H6L5 6"/></svg>
       Clear canvas
     </button>
-
     <div class="sb-divider"></div>
-    <div class="sb-section">Tips</div>
-    <div style="padding:6px 10px 10px; font-size:11px; color:var(--text3); line-height:1.6;">
-      • Drag nodes freely to reposition<br>
-      • <b>Connect:</b> hover a node → blue dots appear → drag one to another node<br>
-      • <b>Multi-connect:</b> select nodes first (drag canvas or Shift+click), then drag a port to connect all to one target<br>
-      • <b>Fix wrong connection:</b> hover the line → click ✕ to delete, or drag ⇄ near the arrow to reroute<br>
-      • Click a line to keep its buttons pinned open<br>
-      • Select nodes + Delete key to remove them<br>
-      • Scroll or +/− to zoom
+    <div style="padding:6px 10px 10px; font-size:11px; color:var(--text3); line-height:1.7;">
+      Hover node → drag blue port to connect<br>
+      Shift+click or drag canvas to multi-select<br>
+      Hover line → ✕ delete · ⇄ reroute<br>
+      Delete key removes selected nodes
     </div>
   </div>
 
@@ -860,6 +974,15 @@
 
     <!-- Selection rubber-band box -->
     <div id="sel-box"></div>
+
+    <!-- Deal popover -->
+    <div id="deal-popover" style="display:none">
+      <div class="dp-hd">
+        <span class="dp-name" id="dp-person-name">Deals</span>
+        <button class="dp-close" onclick="closePopover()"><svg viewBox="0 0 24 24"><line x1="18" y1="6" x2="6" y2="18"/><line x1="6" y1="6" x2="18" y2="18"/></svg></button>
+      </div>
+      <div class="dp-list" id="dp-list"></div>
+    </div>
 
     <!-- Not-connected screen -->
     <div id="connect-screen">
@@ -1075,6 +1198,9 @@ function renderAll() {
   Object.values(nodes).forEach(makeNodeEl);
   edges.forEach(makeEdgeEl);
   syncEmpty();
+  // Re-render deal badges for any already-cached data
+  Object.values(nodes).forEach(n => { if (n.pdPersonId && dealsCache[n.pdPersonId]) renderNodeDealBadge(n); });
+  renderSidebarDeals();
 }
 
 function syncEmpty() {
@@ -1563,6 +1689,8 @@ window.confirmAdd = function() {
       x: 80+Math.random()*300, y: 80+Math.random()*200,
     };
     nodes[n.id] = n; makeNodeEl(n); syncEmpty(); markDirty();
+    // Fetch deals for new linked node
+    fetchPersonDeals(n.pdPersonId).then(() => { renderNodeDealBadge(n); renderSidebarDeals(); });
   } else {
     const name = document.getElementById("m-name").value.trim();
     if (!name) { document.getElementById("m-name").focus(); return; }
@@ -1708,6 +1836,7 @@ async function loadChart() {
       if (d.chartName) document.getElementById("chart-name-input").value = d.chartName;
       renderAll();
       setStatus(`Loaded: ${orgName||orgId}`);
+      fetchAllDeals(); // load deal badges after chart renders
     } else {
       setStatus("No saved chart — start building!");
     }
@@ -1715,6 +1844,228 @@ async function loadChart() {
 }
 
 /* ── Fit view ────────────────────────────────────────────────── */
+/* ── Add dropdown ────────────────────────────────────────────── */
+let addDropdownOpen = false;
+window.toggleAddDropdown = function() {
+  addDropdownOpen = !addDropdownOpen;
+  document.getElementById("add-dropdown").style.display = addDropdownOpen ? "block" : "none";
+};
+window.closeAddDropdown = function() {
+  addDropdownOpen = false;
+  document.getElementById("add-dropdown").style.display = "none";
+};
+document.addEventListener("click", e => {
+  if (!e.target.closest("#add-btn") && !e.target.closest("#add-dropdown")) closeAddDropdown();
+});
+
+/* ── Deals ───────────────────────────────────────────────────── */
+// Cache: pdPersonId → {deals: [...], ts: timestamp}
+const dealsCache = {};
+// All fetched deals indexed by pdPersonId for sidebar
+let allPersonDeals = {};
+
+// Fetch deals for all linked nodes in the current chart
+async function fetchAllDeals() {
+  const linked = Object.values(nodes).filter(n => n.pdPersonId && !n.placeholder);
+  if (!linked.length) {
+    renderSidebarDeals();
+    return;
+  }
+  setStatus("Loading deals…");
+  await Promise.all(linked.map(n => fetchPersonDeals(n.pdPersonId)));
+  // Re-render badges on all nodes
+  linked.forEach(n => renderNodeDealBadge(n));
+  renderSidebarDeals();
+  setStatus("Ready");
+}
+
+async function fetchPersonDeals(pdPersonId) {
+  const cached = dealsCache[pdPersonId];
+  if (cached && Date.now() - cached.ts < 60000) return cached.deals; // 1 min TTL
+  try {
+    const d = await fetch(`/api/person/deals?personId=${pdPersonId}&companyId=${companyId}`)
+      .then(r => r.json());
+    const deals = d.deals || [];
+    dealsCache[pdPersonId] = { deals, ts: Date.now() };
+    allPersonDeals[pdPersonId] = deals;
+    return deals;
+  } catch(e) {
+    return [];
+  }
+}
+
+window.refreshDeals = async function() {
+  // Clear cache and re-fetch
+  Object.keys(dealsCache).forEach(k => delete dealsCache[k]);
+  await fetchAllDeals();
+  setStatus("Deals refreshed");
+};
+
+// Render deal badges on a single node card
+function renderNodeDealBadge(n) {
+  if (!n.pdPersonId) return;
+  const el = document.getElementById("nd-"+n.id);
+  if (!el) return;
+  // Remove existing
+  el.querySelector(".node-deals")?.remove();
+
+  const deals = (dealsCache[n.pdPersonId]?.deals) || [];
+  if (!deals.length) return;
+
+  // Group by status
+  const won  = deals.filter(d => d.status === "won");
+  const lost = deals.filter(d => d.status === "lost");
+  const open = deals.filter(d => d.status === "open");
+
+  const container = document.createElement("div");
+  container.className = "node-deals";
+
+  // Show up to 2 badges, then a "+N more" if needed
+  const groups = [
+    { list: open, cls: "open",  icon: `<svg viewBox="0 0 24 24"><circle cx="12" cy="12" r="4"/></svg>`,  label: "active" },
+    { list: won,  cls: "won",   icon: `<svg viewBox="0 0 24 24"><polyline points="20 6 9 17 4 12"/></svg>`, label: "won" },
+    { list: lost, cls: "lost",  icon: `<svg viewBox="0 0 24 24"><line x1="18" y1="6" x2="6" y2="18"/><line x1="6" y1="6" x2="18" y2="18"/></svg>`, label: "lost" },
+  ].filter(g => g.list.length > 0);
+
+  let shown = 0;
+  groups.forEach(g => {
+    if (shown >= 2) return;
+    const badge = document.createElement("span");
+    badge.className = `deal-badge ${g.cls}`;
+    const title = g.list.length === 1
+      ? g.list[0].title
+      : `${g.list.length} ${g.label}`;
+    badge.innerHTML = g.icon + escHtml(truncate(title, 18));
+    badge.title = g.list.map(d=>d.title).join("");
+    badge.addEventListener("click", ev => {
+      ev.stopPropagation();
+      openDealPopover(n, ev.currentTarget);
+    });
+    container.appendChild(badge);
+    shown++;
+  });
+
+  const remaining = deals.length - shown;
+  if (remaining > 0 && shown >= 2) {
+    const more = document.createElement("span");
+    more.className = "deal-badge-more";
+    more.textContent = `+${remaining}`;
+    more.title = `${remaining} more deal${remaining>1?"s":""}`;
+    more.addEventListener("click", ev => {
+      ev.stopPropagation();
+      openDealPopover(n, ev.currentTarget);
+    });
+    container.appendChild(more);
+  }
+
+  el.appendChild(container);
+}
+
+/* ── Deal popover ────────────────────────────────────────────── */
+let popoverOpen = false;
+
+async function openDealPopover(n, anchor) {
+  const pop = document.getElementById("deal-popover");
+  document.getElementById("dp-person-name").textContent = n.name;
+  document.getElementById("dp-list").innerHTML = `<div class="dp-loading">Loading…</div>`;
+  pop.style.display = "block";
+  popoverOpen = true;
+
+  // Position near the badge
+  const rect = anchor.getBoundingClientRect();
+  const pw = 280;
+  let left = rect.left;
+  if (left + pw > window.innerWidth - 8) left = window.innerWidth - pw - 8;
+  pop.style.left = left + "px";
+  pop.style.top  = (rect.bottom + 6) + "px";
+
+  const deals = await fetchPersonDeals(n.pdPersonId);
+  renderPopoverDeals(deals);
+}
+
+function renderPopoverDeals(deals) {
+  const list = document.getElementById("dp-list");
+  if (!deals.length) {
+    list.innerHTML = `<div class="dp-loading">No deals found</div>`;
+    return;
+  }
+  const statusOrder = { open: 0, won: 1, lost: 2 };
+  const sorted = [...deals].sort((a,b) => (statusOrder[a.status]||0)-(statusOrder[b.status]||0));
+  list.innerHTML = sorted.map(d => {
+    const val = d.value ? `${fmtVal(d.value)} ${d.currency}` : "";
+    const date = d.close_time ? new Date(d.close_time).toLocaleDateString() : "";
+    const meta = [val, date].filter(Boolean).join(" · ");
+    // Link to deal in Pipedrive — opens in new tab
+    return `<div class="dp-deal" onclick="openDealInPipedrive(${d.id})">
+      <div class="dp-dot ${d.status}"></div>
+      <div class="dp-info">
+        <div class="dp-title">${escHtml(d.title)}</div>
+        ${meta ? `<div class="dp-meta">${escHtml(meta)}</div>` : ""}
+      </div>
+      <span class="dp-arrow">↗</span>
+    </div>`;
+  }).join("");
+}
+
+window.openDealInPipedrive = function(dealId) {
+  // Open the deal in Pipedrive — works both standalone and inside the iframe
+  window.open(`https://app.pipedrive.com/deal/${dealId}`, "_blank");
+};
+
+window.closePopover = function() {
+  document.getElementById("deal-popover").style.display = "none";
+  popoverOpen = false;
+};
+
+// Close popover when clicking outside
+document.addEventListener("click", e => {
+  if (popoverOpen && !e.target.closest("#deal-popover") && !e.target.closest(".deal-badge") && !e.target.closest(".deal-badge-more")) {
+    closePopover();
+  }
+});
+
+/* ── Sidebar deals panel ─────────────────────────────────────── */
+function renderSidebarDeals() {
+  const body = document.getElementById("sb-deals-body");
+  const linked = Object.values(nodes).filter(n => n.pdPersonId && !n.placeholder);
+  if (!linked.length) {
+    body.innerHTML = `<div class="sb-deals-empty">No linked people on chart</div>`;
+    return;
+  }
+  let html = "";
+  linked.forEach(n => {
+    const deals = dealsCache[n.pdPersonId]?.deals || [];
+    if (!deals.length) return;
+    html += `<div class="sb-deal-person">
+      <div class="sb-deal-person-name">${escHtml(n.name)}</div>`;
+    const statusOrder = { open: 0, won: 1, lost: 2 };
+    const sorted = [...deals].sort((a,b)=>(statusOrder[a.status]||0)-(statusOrder[b.status]||0));
+    sorted.forEach(d => {
+      const val = d.value ? fmtVal(d.value) + " " + d.currency : "";
+      html += `<div class="sb-deal-row" onclick="openDealInPipedrive(${d.id})">
+        <div class="sb-deal-dot ${d.status}"></div>
+        <div class="sb-deal-title">${escHtml(d.title)}</div>
+        ${val ? `<div class="sb-deal-val">${escHtml(val)}</div>` : ""}
+      </div>`;
+    });
+    html += `</div>`;
+  });
+  if (!html) html = `<div class="sb-deals-empty">No deals found for people on this chart</div>`;
+  body.innerHTML = html;
+}
+
+/* ── Helpers ─────────────────────────────────────────────────── */
+function escHtml(s) {
+  return String(s||"").replace(/&/g,"&amp;").replace(/</g,"&lt;").replace(/>/g,"&gt;").replace(/"/g,"&quot;");
+}
+function truncate(s, n) {
+  return s && s.length > n ? s.slice(0, n) + "…" : s;
+}
+function fmtVal(v) {
+  if (!v) return "";
+  return Number(v).toLocaleString(undefined, {maximumFractionDigits:0});
+}
+
 window.fitView = function() {
   const ns = Object.values(nodes);
   if (!ns.length) return;
