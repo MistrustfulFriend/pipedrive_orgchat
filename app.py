@@ -2,17 +2,16 @@ import os
 import json
 import secrets
 import time
-import requests
+from pathlib import Path
+from urllib.parse import urlencode
 
+import requests
 from fastapi import FastAPI, Request
 from fastapi.responses import FileResponse, RedirectResponse, JSONResponse
 from fastapi.staticfiles import StaticFiles
-from urllib.parse import urlencode
-
 from fastapi.middleware.cors import CORSMiddleware
 from starlette.middleware.base import BaseHTTPMiddleware
 
-from pathlib import Path
 
 BASE_DIR = Path(__file__).resolve().parent
 
@@ -26,23 +25,23 @@ def html_file(name: str) -> str:
         return str(p2)
     raise FileNotFoundError(f"Cannot find {name} in static/ or project root")
 
+
 # ──────────────────────────────────────────────────────────────
 # App
 # ──────────────────────────────────────────────────────────────
 app = FastAPI()
 
-
 # ──────────────────────────────────────────────────────────────
 # Settings (ENV)
 # ──────────────────────────────────────────────────────────────
-BASE_URL = os.getenv("BASE_URL", "").strip()
+BASE_URL = os.getenv("BASE_URL", "").strip().rstrip("/")  # IMPORTANT: no trailing slash
 PIPEDRIVE_CLIENT_ID = os.getenv("PIPEDRIVE_CLIENT_ID", "").strip()
 PIPEDRIVE_CLIENT_SECRET = os.getenv("PIPEDRIVE_CLIENT_SECRET", "").strip()
 
 UPSTASH_URL = os.getenv("UPSTASH_REDIS_REST_URL", "").strip()
 UPSTASH_TOKEN = os.getenv("UPSTASH_REDIS_REST_TOKEN", "").strip()
 
-STATIC_DIR = os.path.join(os.path.dirname(__file__), "static")
+STATIC_DIR = str(BASE_DIR / "static")
 
 SENTINEL = "📊 [ORG_CHART_DATA_v1]"
 STATE_TTL_SECONDS = 600
@@ -56,20 +55,15 @@ def _require_env(name: str, value: str) -> str:
 
 # ──────────────────────────────────────────────────────────────
 # CORS
-# (Your frontend calls your own backend, so CORS isn’t critical,
-# but it helps for debugging and any cross-origin calls.)
 # ──────────────────────────────────────────────────────────────
 app.add_middleware(
     CORSMiddleware,
-    allow_origins=[
-        "https://app.pipedrive.com",
-    ],
+    allow_origins=["https://app.pipedrive.com"],
     allow_origin_regex=r"^https://.*\.pipedrive\.com$",
     allow_credentials=True,
     allow_methods=["*"],
     allow_headers=["*"],
 )
-
 
 # ──────────────────────────────────────────────────────────────
 # Iframe headers middleware
@@ -87,11 +81,8 @@ class IframeHeadersMiddleware(BaseHTTPMiddleware):
             "frame-ancestors https://app.pipedrive.com https://*.pipedrive.com 'self'"
         )
 
-        # Helpful for OAuth / SDK / iframe flows
         response.headers["referrer-policy"] = "strict-origin-when-cross-origin"
-
         return response
-
 
 app.add_middleware(IframeHeadersMiddleware)
 
@@ -101,7 +92,6 @@ app.add_middleware(IframeHeadersMiddleware)
 # ──────────────────────────────────────────────────────────────
 _mem_store: dict[str, str] = {}
 _state_store: dict[str, int] = {}
-
 
 def _redis(cmd: list):
     if not UPSTASH_URL or not UPSTASH_TOKEN:
@@ -133,7 +123,6 @@ def save_tokens(company_id: str, access_token: str, refresh_token: str, expires_
     if result is None:
         _mem_store[key] = data
 
-
 def load_tokens(company_id: str):
     key = f"oc:tokens:{company_id}"
     raw = _redis(["GET", key])
@@ -146,7 +135,6 @@ def load_tokens(company_id: str):
     except Exception:
         return None
 
-
 def save_oauth_state(state: str):
     key = f"oc:state:{state}"
     exp = int(time.time()) + STATE_TTL_SECONDS
@@ -154,9 +142,7 @@ def save_oauth_state(state: str):
     if result is None:
         _state_store[state] = exp
 
-
 def consume_oauth_state(state: str) -> bool:
-    # True only if it exists and is not expired (then consume it)
     key = f"oc:state:{state}"
 
     val = _redis(["GET", key])
@@ -209,24 +195,16 @@ def get_valid_token(company_id: str):
 def root():
     return RedirectResponse("/panel")
 
-
 @app.get("/panel")
 def panel():
     return FileResponse(html_file("panel.html"))
-
 
 @app.get("/health")
 def health():
     return {"status": "ok"}
 
-
 @app.get("/api/debug/context")
 def debug_context(request: Request):
-    """
-    This helps diagnose Pipedrive modal issues.
-    Open in the iframe? You’ll see query params like:
-    id, companyId, userId, resource, view, selectedIds, token, etc.
-    """
     return {
         "query": dict(request.query_params),
         "headers_subset": {
@@ -258,62 +236,59 @@ def oauth_start():
             "state": state,
         }
     )
-    return FileResponse(html_file("oauth_success.html"))
+
+    # ✅ THIS is the missing piece: send the user to Pipedrive OAuth consent screen
+    return RedirectResponse(f"https://oauth.pipedrive.com/oauth/authorize?{params}")
 
 
 @app.get("/oauth/callback")
 def oauth_callback(request: Request):
-    code  = request.query_params.get("code")
-    state = request.query_params.get("state")  # <-- change: None if missing
+    code = request.query_params.get("code")
+    state = request.query_params.get("state")
 
-    # <-- change: validate only if state exists
-    if state and not consume_oauth_state(state):
+    if not state or not consume_oauth_state(state):
         return JSONResponse({"error": "Invalid or expired state."}, status_code=400)
 
     if not code:
         return JSONResponse({"error": "No authorisation code returned."}, status_code=400)
 
-    client_secret = os.getenv("PIPEDRIVE_CLIENT_SECRET", "")
-    if not PIPEDRIVE_CLIENT_ID or not client_secret:
-        return JSONResponse({"error": "Missing client credentials."}, status_code=500)
+    _require_env("BASE_URL", BASE_URL)
+    _require_env("PIPEDRIVE_CLIENT_ID", PIPEDRIVE_CLIENT_ID)
+    _require_env("PIPEDRIVE_CLIENT_SECRET", PIPEDRIVE_CLIENT_SECRET)
+
+    redirect_uri = f"{BASE_URL}/oauth/callback"
 
     r = requests.post(
         "https://oauth.pipedrive.com/oauth/token",
         data={
-            "grant_type":    "authorization_code",
-            "code":          code,
-            "redirect_uri":  REDIRECT_URI,
-            "client_id":     PIPEDRIVE_CLIENT_ID,
-            "client_secret": client_secret,
+            "grant_type": "authorization_code",
+            "code": code,
+            "redirect_uri": redirect_uri,
+            "client_id": PIPEDRIVE_CLIENT_ID,
+            "client_secret": PIPEDRIVE_CLIENT_SECRET,
         },
         timeout=30,
     )
     if r.status_code != 200:
         return JSONResponse({"error": "Token exchange failed", "body": r.text}, status_code=400)
 
-    tokens        = r.json()
-    access_token  = tokens["access_token"]
+    tokens = r.json()
+    access_token = tokens["access_token"]
     refresh_token = tokens["refresh_token"]
-    expires_in    = int(tokens.get("expires_in", 3600))
+    expires_in = int(tokens.get("expires_in", 3600))
 
     me = requests.get(
         "https://api.pipedrive.com/v1/users/me",
         headers={"Authorization": f"Bearer {access_token}"},
         timeout=15,
     )
-
-    if me.status_code != 200:
-        return JSONResponse(
-            {"error": "Pipedrive /users/me failed", "status": me.status_code, "body": me.text},
-            status_code=400,
-        )
-
+    me.raise_for_status()
     company_id = str(me.json()["data"]["company_id"])
 
     save_tokens(company_id, access_token, refresh_token, expires_in)
 
-    # <-- change: serve from correct location
-    return FileResponse(html_path("oauth_success.html"))
+    # ✅ Serve success page correctly
+    return FileResponse(html_file("oauth_success.html"))
 
 
 @app.get("/api/status")
@@ -375,7 +350,6 @@ async def orgchart_save(payload: dict):
     headers = {"Authorization": f"Bearer {access_token}"}
     note_body = f"{SENTINEL}\nName: {chart_name}\n{chart_json}"
 
-    # Find existing chart note for this org
     existing_id = None
     nr = requests.get(
         "https://api.pipedrive.com/v1/notes",
