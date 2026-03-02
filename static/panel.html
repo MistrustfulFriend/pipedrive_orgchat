@@ -256,15 +256,18 @@
       inset: 0;
       width: 100%; height: 100%;
       pointer-events: none;  /* layer itself transparent */
-      z-index: 1;
+      z-index: 3;            /* above nodes-layer so edge hit areas work */
     }
-    /* edges need their own pointer events to be clickable */
     #edges-g { pointer-events: all; }
-    #drag-line { pointer-events: none; }
+    #drag-g   { pointer-events: none; }
     #nodes-layer {
       position: absolute;
       inset: 0;
       z-index: 2;
+      pointer-events: none; /* nodes themselves re-enable pointer-events */
+    }
+    #nodes-layer .node {
+      pointer-events: all;  /* each node card is individually clickable */
     }
 
     /* ─── Nodes ────────────────────────────────────────────── */
@@ -403,31 +406,35 @@
       stroke-width: 2;
       cursor: pointer;
       transition: stroke .15s;
+      pointer-events: none; /* hit area handles events */
     }
     .edge-hit {
       fill: none;
-      stroke: transparent;
-      stroke-width: 16;
+      stroke: rgba(0,0,0,0.001); /* near-zero opacity — browser still hit-tests it */
+      stroke-width: 20;
       cursor: pointer;
+      pointer-events: stroke;
     }
-    .edge-group:hover .edge-path { stroke: var(--blue); }
-    .edge-group.edge-selected .edge-path { stroke: var(--blue); stroke-width: 2.5; }
+    /* JS adds .edge-hover class on mouseenter, removes on mouseleave */
+    .edge-group.edge-hover .edge-path,
+    .edge-group.edge-selected .edge-path { stroke: var(--blue); }
+    .edge-group.edge-selected .edge-path { stroke-width: 2.5; }
 
-    /* ✕ delete button at midpoint */
-    .edge-del-btn { display: none; cursor: pointer; }
+    /* ✕ delete button — hidden by default via opacity, not display:none */
+    .edge-del-btn { cursor: pointer; opacity: 0; transition: opacity .12s; pointer-events: none; }
     .edge-del-circle { fill: white; stroke: var(--red); stroke-width: 1.5; transition: fill .12s; }
     .edge-del-x { stroke: var(--red); stroke-width: 2; stroke-linecap: round; }
-    .edge-group:hover .edge-del-btn,
-    .edge-group.edge-selected .edge-del-btn { display: block; }
+    .edge-group.edge-hover .edge-del-btn,
+    .edge-group.edge-selected .edge-del-btn { opacity: 1; pointer-events: all; }
     .edge-del-btn:hover .edge-del-circle { fill: var(--red); }
     .edge-del-btn:hover .edge-del-x { stroke: white; }
 
-    /* ⇄ reroute handle — drag arrowhead to a new target */
-    .edge-reroute-btn { display: none; cursor: crosshair; }
+    /* ⇄ reroute handle */
+    .edge-reroute-btn { cursor: crosshair; opacity: 0; transition: opacity .12s; pointer-events: none; }
     .edge-reroute-circle { fill: white; stroke: var(--blue); stroke-width: 1.5; transition: fill .12s; }
     .edge-reroute-arrow { stroke: var(--blue); stroke-width: 2; stroke-linecap: round; fill: none; }
-    .edge-group:hover .edge-reroute-btn,
-    .edge-group.edge-selected .edge-reroute-btn { display: block; }
+    .edge-group.edge-hover .edge-reroute-btn,
+    .edge-group.edge-selected .edge-reroute-btn { opacity: 1; pointer-events: all; }
     .edge-reroute-btn:hover .edge-reroute-circle { fill: var(--blue); }
     .edge-reroute-btn:hover .edge-reroute-arrow { stroke: white; }
 
@@ -953,12 +960,13 @@
         <marker id="arr-blue" markerWidth="8" markerHeight="6" refX="7" refY="3" orient="auto">
           <polygon points="0 0, 8 3, 0 6" fill="#1864d4"/>
         </marker>
-        <marker id="arr-red" markerWidth="8" markerHeight="6" refX="7" refY="3" orient="auto">
-          <polygon points="0 0, 8 3, 0 6" fill="#dc2626"/>
-        </marker>
       </defs>
-      <g id="edges-g"></g>
-      <line id="drag-line" marker-end="url(#arr-blue)"/>
+      <!-- Single transform group — pan+zoom applied here once for both edges and drag line -->
+      <g id="canvas-g">
+        <g id="edges-g"></g>
+        <line id="drag-line" marker-end="url(#arr-blue)"
+          style="fill:none;stroke:#1864d4;stroke-width:2;stroke-dasharray:6 3;display:none;pointer-events:none"/>
+      </g>
     </svg>
 
     <div id="nodes-layer"></div>
@@ -1065,44 +1073,42 @@
 (async () => {
 
 /* ── SDK + URL params ─────────────────────────────────────────── */
+// NOTE: Pipedrive appends its own session token as ?id= to the iframe URL.
+// That token is NOT the org ID — never read ?id= as orgId.
+// companyId may come from ?companyId= (our own OAuth redirect sets this).
+// orgId and orgName ONLY come from sdk.getContext().
 const _p      = new URLSearchParams(location.search);
 let companyId = _p.get("companyId") || "";
-let orgId     = _p.get("id")        || "";
-let orgName   = decodeURIComponent(_p.get("name") || "");
+let orgId     = "";   // set only via SDK context below
+let orgName   = "";
 let sdk       = null;
 
 try {
   sdk = await new AppExtensionsSDK().initialize();
   try { await sdk.execute(Command.RESIZE, { width: 1100, height: 700 }); } catch(e) {}
 
-  // Pipedrive passes the organisation context via customContext or selectedIds
-  // depending on how the extension panel is configured.
-  // Try every known location the SDK may put it.
-  const ctx = sdk.userContext || sdk.context || {};
+  // getContext() returns the record the panel is open on.
+  // Shape: { companyId, userId, data: { id, title/name, ... } }
+  let ctx = {};
+  try { ctx = await sdk.getContext(); } catch(e) { console.warn("getContext failed", e); }
 
-  // companyId (Pipedrive account ID)
+  console.log("Pipedrive SDK context:", JSON.stringify(ctx));
+
+  // companyId — identifies the Pipedrive account (used for our Redis keys + API calls)
   if (!companyId) {
-    companyId = String(
-      ctx.companyId || ctx.company_id ||
-      sdk.companyId || sdk.company_id || ""
-    );
+    companyId = String(ctx.companyId || "");
   }
 
-  // orgId + orgName from the organisation record being viewed
-  if (!orgId) {
-    const id =
-      ctx.id || ctx.org_id || ctx.organization_id ||
-      (ctx.data && ctx.data.id) || "";
-    if (id) orgId = String(id);
-  }
-  if (!orgName) {
-    const name =
-      ctx.name || ctx.org_name ||
-      (ctx.data && ctx.data.name) || "";
-    if (name) orgName = String(name);
-  }
+  // org record the panel was opened on
+  const data = ctx.data || {};
+  // Pipedrive uses "id" as the numeric record ID
+  if (data.id) orgId = String(data.id);
+  // Name is "name" for organisations (vs "title" for deals/activities)
+  if (data.name)  orgName = String(data.name);
+  else if (data.title) orgName = String(data.title);
 
 } catch(e) {
+  console.warn("SDK init failed:", e);
   sdk = null;
 }
 
@@ -1136,6 +1142,7 @@ let zoom = 1.0, panX = 0, panY = 0;
 const canvasEl  = document.getElementById("canvas-wrap");
 const nodesEl   = document.getElementById("nodes-layer");
 const edgesG    = document.getElementById("edges-g");
+const canvasG   = document.getElementById("canvas-g");   // shared SVG transform group
 const dragLine  = document.getElementById("drag-line");
 const emptyEl   = document.getElementById("empty-state");
 const banner    = document.getElementById("connect-banner");
@@ -1144,18 +1151,16 @@ const statusDot = document.getElementById("status-dot");
 const selBox    = document.getElementById("sel-box");
 
 /* ── Transform helpers ───────────────────────────────────────── */
-// Apply zoom+pan to both layers together so they always match.
 function applyTransform() {
-  const t = `translate(${panX}px,${panY}px) scale(${zoom})`;
-  nodesEl.style.transform = t;
+  // nodes-layer: CSS transform
+  nodesEl.style.transform = `translate(${panX}px,${panY}px) scale(${zoom})`;
   nodesEl.style.transformOrigin = "0 0";
-  // The SVG edges-g gets a real SVG transform (not CSS) so SVG coords stay correct
-  edgesG.setAttribute("transform", `translate(${panX},${panY}) scale(${zoom})`);
-  dragLine.setAttribute("transform", `translate(${panX},${panY}) scale(${zoom})`);
+  // SVG: one real SVG transform on the shared group — edges + dragLine move together
+  canvasG.setAttribute("transform", `translate(${panX},${panY}) scale(${zoom})`);
   document.getElementById("zoom-label").textContent = Math.round(zoom*100)+"%";
 }
 
-// Convert a mouse event's clientX/Y to canvas logical coordinates
+// Convert screen coords → logical canvas coords (inverse of transform)
 function clientToCanvas(cx, cy) {
   const rect = canvasEl.getBoundingClientRect();
   return [(cx - rect.left - panX) / zoom, (cy - rect.top - panY) / zoom];
@@ -1185,9 +1190,10 @@ canvasEl.addEventListener("wheel", e => {
 applyTransform();
 
 /* ── Load org from context ───────────────────────────────────── */
-// If we have orgId from the SDK (opened from a company record), load immediately.
+// orgId is set only when SDK getContext() returned a valid organisation record.
+// orgName is always populated alongside it. Show name in picker, load chart.
 if (orgId) {
-  document.getElementById("org-picker-label").textContent = orgName || orgId;
+  document.getElementById("org-picker-label").textContent = orgName || `Org #${orgId}`;
   await loadChart();
 }
 
@@ -1332,38 +1338,59 @@ function makeEdgeEl(e) {
   g.id = "ed-"+e.id;
   g.className.baseVal = "edge-group";
 
+  // Wide invisible hit area — stroke must be non-zero opacity for hit testing
   const hit = svgEl("path");
   hit.setAttribute("class","edge-hit");
   hit.setAttribute("d", edgePath(f,t));
-  hit.addEventListener("click", ev => { ev.stopPropagation(); selectEdge(e.id); });
+  hit.setAttribute("pointer-events","stroke");
 
+  // Visible line
   const path = svgEl("path");
   path.setAttribute("class","edge-path");
   path.setAttribute("marker-end","url(#arr)");
   path.setAttribute("d", edgePath(f,t));
+
+  // JS hover — more reliable than CSS :hover on SVG across browsers
+  hit.addEventListener("mouseenter", () => g.classList.add("edge-hover"));
+  hit.addEventListener("mouseleave", ev => {
+    // Don't remove hover if mouse moved to a button on this edge
+    if (!ev.relatedTarget || !g.contains(ev.relatedTarget)) g.classList.remove("edge-hover");
+  });
+  g.addEventListener("mouseleave", ev => {
+    if (!ev.relatedTarget || !g.contains(ev.relatedTarget)) g.classList.remove("edge-hover");
+  });
+  hit.addEventListener("click", ev => { ev.stopPropagation(); selectEdge(e.id); });
 
   // ── Delete ✕ at midpoint
   const [mx,my] = edgeMidpoint(f,t);
   const delG = svgEl("g");
   delG.setAttribute("class","edge-del-btn");
   delG.setAttribute("transform",`translate(${mx},${my})`);
-  const dc = svgEl("circle"); dc.setAttribute("class","edge-del-circle"); dc.setAttribute("r","8");
+  const dc = svgEl("circle"); dc.setAttribute("class","edge-del-circle"); dc.setAttribute("r","10");
   const dl1 = svgEl("line"); dl1.setAttribute("class","edge-del-x");
-  dl1.setAttribute("x1","-3"); dl1.setAttribute("y1","-3"); dl1.setAttribute("x2","3"); dl1.setAttribute("y2","3");
+  dl1.setAttribute("x1","-4"); dl1.setAttribute("y1","-4"); dl1.setAttribute("x2","4"); dl1.setAttribute("y2","4");
   const dl2 = svgEl("line"); dl2.setAttribute("class","edge-del-x");
-  dl2.setAttribute("x1","3"); dl2.setAttribute("y1","-3"); dl2.setAttribute("x2","-3"); dl2.setAttribute("y2","3");
+  dl2.setAttribute("x1","4"); dl2.setAttribute("y1","-4"); dl2.setAttribute("x2","-4"); dl2.setAttribute("y2","4");
   delG.appendChild(dc); delG.appendChild(dl1); delG.appendChild(dl2);
   delG.addEventListener("click", ev => { ev.stopPropagation(); deleteEdge(e.id); });
+  // Keep hover state when mouse is over the button
+  delG.addEventListener("mouseenter", () => g.classList.add("edge-hover"));
+  delG.addEventListener("mouseleave", ev => {
+    if (!ev.relatedTarget || !g.contains(ev.relatedTarget)) g.classList.remove("edge-hover");
+  });
 
-  // ── Reroute ⇄ near arrowhead
+  // ── Reroute ⇄ near arrowhead  
   const [rx,ry] = edgeTailPos(f,t);
   const rrG = svgEl("g");
   rrG.setAttribute("class","edge-reroute-btn");
   rrG.setAttribute("transform",`translate(${rx},${ry})`);
-  const rrc = svgEl("circle"); rrc.setAttribute("class","edge-reroute-circle"); rrc.setAttribute("r","8");
-  // Arrow icon: ↺
-  const rra = svgEl("polyline"); rra.setAttribute("class","edge-reroute-arrow"); rra.setAttribute("points","-3,-3 0,3 3,-3");
+  const rrc = svgEl("circle"); rrc.setAttribute("class","edge-reroute-circle"); rrc.setAttribute("r","10");
+  const rra = svgEl("polyline"); rra.setAttribute("class","edge-reroute-arrow"); rra.setAttribute("points","-4,-3 0,3 4,-3");
   rrG.appendChild(rrc); rrG.appendChild(rra);
+  rrG.addEventListener("mouseenter", () => g.classList.add("edge-hover"));
+  rrG.addEventListener("mouseleave", ev => {
+    if (!ev.relatedTarget || !g.contains(ev.relatedTarget)) g.classList.remove("edge-hover");
+  });
   rrG.addEventListener("mousedown", ev => { ev.stopPropagation(); ev.preventDefault(); startEdgeReroute(e.id, ev); });
 
   g.appendChild(hit); g.appendChild(path); g.appendChild(delG); g.appendChild(rrG);
