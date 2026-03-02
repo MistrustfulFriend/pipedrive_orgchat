@@ -9,23 +9,23 @@
   <link href="https://fonts.googleapis.com/css2?family=DM+Sans:ital,opsz,wght@0,9..40,400;0,9..40,500;0,9..40,600;1,9..40,400&family=DM+Mono:wght@400;500&display=swap" rel="stylesheet" />
   <style>
     :root {
-      --bg:       #0d1117;
-      --bg2:      #161b22;
-      --bg3:      #1c2332;
-      --bg4:      #21262d;
-      --border:   #30363d;
-      --border2:  #3d444d;
-      --green:    #3fb950;
-      --green2:   #2ea043;
-      --greenDim: rgba(63,185,80,0.15);
-      --blue:     #58a6ff;
-      --blueDim:  rgba(88,166,255,0.12);
-      --purple:   #bc8cff;
-      --text:     #e6edf3;
-      --text2:    #8b949e;
-      --text3:    #484f58;
-      --red:      #f85149;
-      --yellow:   #d29922;
+      --bg:       #f0f2f5;
+      --bg2:      #ffffff;
+      --bg3:      #f5f6f8;
+      --bg4:      #eceef1;
+      --border:   #dde1e7;
+      --border2:  #c8cdd6;
+      --green:    #1a7f3c;
+      --green2:   #166d34;
+      --greenDim: rgba(26,127,60,0.10);
+      --blue:     #1864d4;
+      --blueDim:  rgba(24,100,212,0.10);
+      --purple:   #7c3aed;
+      --text:     #111827;
+      --text2:    #4b5563;
+      --text3:    #9ca3af;
+      --red:      #dc2626;
+      --yellow:   #d97706;
       --radius:   8px;
       --font:     'DM Sans', system-ui, sans-serif;
       --mono:     'DM Mono', monospace;
@@ -242,9 +242,8 @@
       flex: 1;
       position: relative;
       overflow: hidden;
-      background: var(--bg);
-      background-image:
-        radial-gradient(circle, var(--border) 1px, transparent 1px);
+      background: #f0f2f5;
+      background-image: radial-gradient(circle, #c8cdd6 1px, transparent 1px);
       background-size: 24px 24px;
     }
 
@@ -274,12 +273,12 @@
       cursor: grab;
       user-select: none;
       transition: border-color .15s, box-shadow .15s;
-      box-shadow: 0 2px 12px rgba(0,0,0,.5);
+      box-shadow: 0 1px 4px rgba(0,0,0,.08), 0 2px 12px rgba(0,0,0,.05);
     }
-    .node:hover { border-color: var(--border2); box-shadow: 0 4px 20px rgba(0,0,0,.6); z-index: 10; }
+    .node:hover { border-color: var(--border2); box-shadow: 0 4px 16px rgba(0,0,0,.12); z-index: 10; }
     .node.selected { border-color: var(--blue); box-shadow: 0 0 0 3px var(--blueDim); }
-    .node.dragging { cursor: grabbing; opacity: .9; z-index: 50; box-shadow: 0 8px 32px rgba(0,0,0,.7); }
-    .node.placeholder-node { border-style: dashed; border-color: rgba(188,140,255,0.4); }
+    .node.dragging { cursor: grabbing; opacity: .95; z-index: 50; box-shadow: 0 8px 28px rgba(0,0,0,.18); }
+    .node.placeholder-node { border-style: dashed; border-color: rgba(124,58,237,0.35); }
     .node.placeholder-node:hover { border-color: var(--purple); }
 
     .node-header {
@@ -317,18 +316,18 @@
     .node-avatar {
       width: 32px; height: 32px;
       border-radius: 50%;
-      background: var(--bg4);
-      border: 1px solid var(--border);
+      background: var(--blueDim);
+      border: 1px solid rgba(24,100,212,0.2);
       display: flex; align-items: center; justify-content: center;
       font-size: 11px;
       font-weight: 600;
-      color: var(--text2);
+      color: var(--blue);
       margin-bottom: 7px;
       letter-spacing: 0.03em;
     }
     .node-avatar.ghost {
-      background: transparent;
-      border: 1px dashed rgba(188,140,255,0.35);
+      background: rgba(124,58,237,0.08);
+      border: 1px dashed rgba(124,58,237,0.4);
       color: var(--purple);
       font-size: 14px;
     }
@@ -363,14 +362,15 @@
       width: 20px; height: 20px;
       border: 1px solid var(--border);
       border-radius: 4px;
-      background: var(--bg3);
+      background: var(--bg2);
       color: var(--text3);
       cursor: pointer;
       display: flex; align-items: center; justify-content: center;
       transition: all .12s;
+      box-shadow: 0 1px 3px rgba(0,0,0,.08);
     }
-    .nha-btn:hover { background: var(--bg4); color: var(--text); border-color: var(--border2); }
-    .nha-btn.del:hover { color: var(--red); border-color: var(--red); }
+    .nha-btn:hover { background: var(--bg3); color: var(--text); border-color: var(--border2); }
+    .nha-btn.del:hover { color: var(--red); border-color: var(--red); background: #fef2f2; }
     .nha-btn svg { width: 10px; height: 10px; stroke: currentColor; fill: none; stroke-width: 2; stroke-linecap: round; stroke-linejoin: round; }
 
     /* ─── Connection ports ─────────────────────────────────── */
@@ -393,25 +393,43 @@
     /* ─── Edges ────────────────────────────────────────────── */
     .edge-path {
       fill: none;
-      stroke: var(--border2);
-      stroke-width: 1.5;
+      stroke: #94a3b8;
+      stroke-width: 2;
       cursor: pointer;
       transition: stroke .15s;
     }
-    /* invisible wide hit area on top of each edge */
     .edge-hit {
       fill: none;
       stroke: transparent;
-      stroke-width: 12;
+      stroke-width: 16;
       cursor: pointer;
     }
-    .edge-hit:hover ~ .edge-path,
     .edge-group:hover .edge-path { stroke: var(--red); }
+
+    /* Disconnect ✕ button that floats on the midpoint of each edge */
+    .edge-del-btn {
+      display: none;
+      cursor: pointer;
+    }
+    .edge-del-circle {
+      fill: white;
+      stroke: var(--red);
+      stroke-width: 1.5;
+      transition: fill .12s;
+    }
+    .edge-del-x {
+      stroke: var(--red);
+      stroke-width: 2;
+      stroke-linecap: round;
+    }
+    .edge-group:hover .edge-del-btn { display: block; }
+    .edge-del-btn:hover .edge-del-circle { fill: var(--red); }
+    .edge-del-btn:hover .edge-del-x { stroke: white; }
 
     #drag-line {
       fill: none;
       stroke: var(--blue);
-      stroke-width: 1.5;
+      stroke-width: 2;
       stroke-dasharray: 6 3;
       display: none;
     }
@@ -429,8 +447,8 @@
       z-index: 0;
     }
     #empty-state svg { width: 44px; height: 44px; stroke: var(--border2); fill: none; stroke-width: 1.5; stroke-linecap: round; stroke-linejoin: round; }
-    #empty-state h3 { font-size: 15px; font-weight: 600; color: var(--text3); }
-    #empty-state p { font-size: 12px; color: var(--text3); opacity: .7; }
+    #empty-state h3 { font-size: 15px; font-weight: 600; color: var(--text2); }
+    #empty-state p { font-size: 12px; color: var(--text3); }
 
     /* ─── Connect modal ────────────────────────────────────── */
     #connect-banner {
@@ -438,24 +456,25 @@
       bottom: 14px;
       left: 50%;
       transform: translateX(-50%);
-      background: var(--bg3);
+      background: white;
       border: 1px solid var(--blue);
       border-radius: 20px;
-      padding: 6px 14px;
+      padding: 6px 16px;
       font-size: 12px;
       color: var(--blue);
       font-weight: 500;
       display: none;
       z-index: 30;
-      box-shadow: 0 4px 20px rgba(88,166,255,0.2);
+      box-shadow: 0 4px 16px rgba(24,100,212,0.15);
       pointer-events: none;
+      white-space: nowrap;
     }
 
     /* ─── Modals ───────────────────────────────────────────── */
     .overlay {
       position: fixed;
       inset: 0;
-      background: rgba(1, 4, 9, 0.8);
+      background: rgba(17,24,39,0.4);
       z-index: 100;
       display: flex;
       align-items: center;
@@ -498,7 +517,7 @@
     .modal-body { padding: 14px 16px; }
     .modal-ft { padding: 10px 16px; border-top: 1px solid var(--border); display: flex; gap: 8px; justify-content: flex-end; }
 
-    .m-tabs { display: flex; gap: 3px; background: var(--bg); padding: 3px; border-radius: 7px; margin-bottom: 14px; }
+    .m-tabs { display: flex; gap: 3px; background: var(--bg3); padding: 3px; border-radius: 7px; margin-bottom: 14px; border: 1px solid var(--border); }
     .m-tab {
       flex: 1; padding: 6px 10px;
       border: none; background: none;
@@ -506,7 +525,7 @@
       color: var(--text3); border-radius: 5px; cursor: pointer;
       transition: all .15s;
     }
-    .m-tab.active { background: var(--bg3); color: var(--text); border: 1px solid var(--border); }
+    .m-tab.active { background: var(--bg2); color: var(--text); border: 1px solid var(--border); box-shadow: 0 1px 3px rgba(0,0,0,.06); }
 
     .field { margin-bottom: 12px; }
     .field:last-child { margin-bottom: 0; }
@@ -534,10 +553,11 @@
     .search-box {
       border: 1px solid var(--border);
       border-radius: 6px;
-      background: var(--bg);
+      background: var(--bg2);
       max-height: 200px;
       overflow-y: auto;
       margin-top: -8px;
+      box-shadow: 0 4px 12px rgba(0,0,0,.08);
     }
     .sr-item {
       display: flex;
@@ -608,12 +628,13 @@
       align-items: center;
       justify-content: center;
       gap: 12px;
-      background: var(--bg);
+      background: rgba(240,242,245,0.95);
       z-index: 40;
+      backdrop-filter: blur(2px);
     }
     #connect-screen.show { display: flex; }
     #connect-screen svg { width: 48px; height: 48px; stroke: var(--text3); fill: none; stroke-width: 1.5; stroke-linecap: round; stroke-linejoin: round; }
-    #connect-screen h2 { font-size: 16px; font-weight: 600; }
+    #connect-screen h2 { font-size: 16px; font-weight: 600; color: var(--text); }
     #connect-screen p { font-size: 13px; color: var(--text2); }
 
     /* modal buttons */
@@ -633,7 +654,7 @@
 
     ::-webkit-scrollbar { width: 4px; }
     ::-webkit-scrollbar-track { background: transparent; }
-    ::-webkit-scrollbar-thumb { background: var(--border); border-radius: 2px; }
+    ::-webkit-scrollbar-thumb { background: var(--border2); border-radius: 2px; }
   </style>
 </head>
 <body>
@@ -770,10 +791,13 @@
     <svg id="svg-layer" xmlns="http://www.w3.org/2000/svg">
       <defs>
         <marker id="arr" markerWidth="8" markerHeight="6" refX="7" refY="3" orient="auto">
-          <polygon points="0 0, 8 3, 0 6" fill="#3d444d"/>
+          <polygon points="0 0, 8 3, 0 6" fill="#94a3b8"/>
         </marker>
         <marker id="arr-blue" markerWidth="8" markerHeight="6" refX="7" refY="3" orient="auto">
-          <polygon points="0 0, 8 3, 0 6" fill="#58a6ff"/>
+          <polygon points="0 0, 8 3, 0 6" fill="#1864d4"/>
+        </marker>
+        <marker id="arr-red" markerWidth="8" markerHeight="6" refX="7" refY="3" orient="auto">
+          <polygon points="0 0, 8 3, 0 6" fill="#dc2626"/>
         </marker>
       </defs>
       <g id="edges-g"></g>
@@ -963,8 +987,8 @@ function makeNodeEl(n) {
   el.style.cssText = `left:${n.x}px;top:${n.y}px`;
 
   const deptColor = n.placeholder
-    ? "rgba(188,140,255,0.2);color:rgba(188,140,255,0.7)"
-    : "rgba(88,166,255,0.12);color:rgba(88,166,255,0.8)";
+    ? "rgba(124,58,237,0.08);color:rgba(124,58,237,0.7)"
+    : "rgba(24,100,212,0.08);color:rgba(24,100,212,0.8)";
 
   el.innerHTML = `
     <div class="node-header">
@@ -1001,13 +1025,11 @@ function makeEdgeEl(e) {
   const f = nodes[e.from], t = nodes[e.to];
   if (!f || !t) return;
 
-  // Wrap in a <g> so hover state works across both paths
   const g = document.createElementNS("http://www.w3.org/2000/svg","g");
   g.id = "ed-"+e.id;
   g.setAttribute("class","edge-group");
-  g.style.cursor = "pointer";
 
-  // Invisible wide hit area (easier to click thin lines)
+  // Invisible wide hit area
   const hit = document.createElementNS("http://www.w3.org/2000/svg","path");
   hit.setAttribute("class","edge-hit");
   hit.setAttribute("d", edgePath(f,t));
@@ -1018,10 +1040,49 @@ function makeEdgeEl(e) {
   path.setAttribute("marker-end","url(#arr)");
   path.setAttribute("d", edgePath(f,t));
 
+  // Disconnect button at midpoint
+  const [mx, my] = edgeMidpoint(f, t);
+  const delG = document.createElementNS("http://www.w3.org/2000/svg","g");
+  delG.setAttribute("class","edge-del-btn");
+  delG.setAttribute("transform",`translate(${mx},${my})`);
+
+  const circle = document.createElementNS("http://www.w3.org/2000/svg","circle");
+  circle.setAttribute("class","edge-del-circle");
+  circle.setAttribute("r","8");
+
+  const x1 = document.createElementNS("http://www.w3.org/2000/svg","line");
+  x1.setAttribute("class","edge-del-x");
+  x1.setAttribute("x1","-3"); x1.setAttribute("y1","-3");
+  x1.setAttribute("x2","3");  x1.setAttribute("y2","3");
+
+  const x2 = document.createElementNS("http://www.w3.org/2000/svg","line");
+  x2.setAttribute("class","edge-del-x");
+  x2.setAttribute("x1","3");  x2.setAttribute("y1","-3");
+  x2.setAttribute("x2","-3"); x2.setAttribute("y2","3");
+
+  delG.appendChild(circle);
+  delG.appendChild(x1);
+  delG.appendChild(x2);
+  delG.addEventListener("click", (ev) => { ev.stopPropagation(); deleteEdge(e.id); });
+
   g.appendChild(hit);
   g.appendChild(path);
+  g.appendChild(delG);
+  // Also allow clicking anywhere on the group (hit area) to delete
   g.addEventListener("click", () => deleteEdge(e.id));
   edgesEl.appendChild(g);
+}
+
+function edgeMidpoint(f, t) {
+  const fw = nodeW(f), fh = nodeH(f), tw = nodeW(t);
+  const x1 = f.x + fw/2, y1 = f.y + fh;
+  const x2 = t.x + tw/2, y2 = t.y;
+  const cp = Math.abs(y2-y1) * 0.5;
+  // Midpoint of cubic bezier at t=0.5
+  const mx = 0.125*x1 + 0.375*(x1) + 0.375*(x2) + 0.125*x2;
+  const c1y = y1+cp, c2y = y2-cp;
+  const my = 0.125*y1 + 0.375*c1y + 0.375*c2y + 0.125*y2;
+  return [mx, my];
 }
 
 function edgePath(f, t) {
@@ -1042,7 +1103,11 @@ function refreshNodeEdges(nid) {
     const g = document.getElementById("ed-"+e.id);
     if (!g) return;
     const d = edgePath(nodes[e.from], nodes[e.to]);
-    g.querySelectorAll("path").forEach(p => p.setAttribute("d", d));
+    g.querySelectorAll(".edge-hit, .edge-path").forEach(p => p.setAttribute("d", d));
+    // Move the disconnect button to new midpoint
+    const [mx, my] = edgeMidpoint(nodes[e.from], nodes[e.to]);
+    const delBtn = g.querySelector(".edge-del-btn");
+    if (delBtn) delBtn.setAttribute("transform", `translate(${mx},${my})`);
   });
 }
 
