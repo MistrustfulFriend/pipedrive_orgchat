@@ -751,36 +751,34 @@
     .add-dd-sub   { font-size:10px; color:var(--text3); }
 
     /* ─── Deal badges on nodes ──────────────────────────── */
+    /* ── Deal counters on node cards ── */
     .node-deals {
-      display: flex; flex-wrap: wrap; gap: 3px;
-      padding: 5px 10px 7px;
+      display: flex; align-items: center; gap: 4px;
+      padding: 5px 12px 8px;
       border-top: 1px solid var(--border);
-    }
-    .deal-badge {
-      display: inline-flex; align-items: center; gap: 3px;
-      padding: 2px 6px;
-      border-radius: 10px;
-      font-size: 10px; font-weight: 600;
       cursor: pointer;
-      transition: filter .12s;
-      white-space: nowrap;
-      max-width: 130px;
-      overflow: hidden; text-overflow: ellipsis;
     }
-    .deal-badge:hover { filter: brightness(0.92); }
-    .deal-badge.won  { background: rgba(26,127,60,0.12); color: var(--green); border: 1px solid rgba(26,127,60,0.25); }
-    .deal-badge.lost { background: rgba(220,38,38,0.08); color: var(--red);   border: 1px solid rgba(220,38,38,0.2); }
-    .deal-badge.open { background: rgba(24,100,212,0.10); color: var(--blue); border: 1px solid rgba(24,100,212,0.22); }
-    .deal-badge svg  { width:8px;height:8px;stroke:currentColor;fill:none;stroke-width:2.5;flex-shrink:0; }
-    .deal-badge-more {
-      display: inline-flex; align-items: center;
-      padding: 2px 6px; border-radius: 10px;
-      font-size: 10px; font-weight: 600; cursor: pointer;
-      background: var(--bg4); color: var(--text2);
-      border: 1px solid var(--border);
-      transition: background .12s;
+    .node-deals:hover { background: var(--bg3); }
+    .deal-counter {
+      display: inline-flex; align-items: center; gap: 3px;
+      padding: 2px 7px 2px 5px;
+      border-radius: 20px;
+      font-size: 10px; font-weight: 700;
+      letter-spacing: 0.01em;
+      transition: filter .1s;
+      flex-shrink: 0;
     }
-    .deal-badge-more:hover { background: var(--bg3); }
+    .deal-counter:hover { filter: brightness(0.93); }
+    .deal-counter .dc-dot {
+      width: 7px; height: 7px; border-radius: 50%; flex-shrink: 0;
+    }
+    .deal-counter.open  { background: rgba(28,100,242,0.10); color: var(--blue); }
+    .deal-counter.open  .dc-dot { background: var(--blue); }
+    .deal-counter.won   { background: rgba(26,127,60,0.11); color: var(--green); }
+    .deal-counter.won   .dc-dot { background: var(--green); }
+    .deal-counter.lost  { background: rgba(224,36,36,0.09); color: var(--red); }
+    .deal-counter.lost  .dc-dot { background: var(--red); }
+    .deal-sep { font-size: 10px; color: var(--border2); margin: 0 1px; }
 
     /* ─── Deal popover ──────────────────────────────────── */
     #deal-popover {
@@ -1088,13 +1086,10 @@
 (async () => {
 
 /* ── SDK + URL params ─────────────────────────────────────────── */
-// NOTE: Pipedrive appends its own session token as ?id= to the iframe URL.
-// That token is NOT the org ID — never read ?id= as orgId.
-// companyId may come from ?companyId= (our own OAuth redirect sets this).
-// orgId and orgName ONLY come from sdk.getContext().
+// Pipedrive appends its session token as ?id= — that is NOT the org ID, never use it.
 const _p      = new URLSearchParams(location.search);
 let companyId = _p.get("companyId") || "";
-let orgId     = "";   // set only via SDK context below
+let orgId     = "";
 let orgName   = "";
 let sdk       = null;
 
@@ -1102,25 +1097,29 @@ try {
   sdk = await new AppExtensionsSDK().initialize();
   try { await sdk.execute(Command.RESIZE, { width: 1100, height: 700 }); } catch(e) {}
 
-  // getContext() returns the record the panel is open on.
-  // Shape: { companyId, userId, data: { id, title/name, ... } }
   let ctx = {};
   try { ctx = await sdk.getContext(); } catch(e) { console.warn("getContext failed", e); }
+  console.log("PD SDK ctx:", JSON.stringify(ctx));
 
-  console.log("Pipedrive SDK context:", JSON.stringify(ctx));
+  // companyId — our Redis partition key
+  if (!companyId) companyId = String(ctx.companyId || "");
 
-  // companyId — identifies the Pipedrive account (used for our Redis keys + API calls)
-  if (!companyId) {
-    companyId = String(ctx.companyId || "");
-  }
-
-  // org record the panel was opened on — Pipedrive SDK context.data
-  // For an organisation panel: data = { id: 1, ... }
+  // Extract org ID + name from context.
+  // Pipedrive v0 SDK: ctx.data = { id, name?, object: "organization" }
   const data = ctx.data || {};
-  if (data.id) orgId = String(data.id);
-  if (data.name)        orgName = String(data.name);
-  else if (data.title)  orgName = String(data.title);
-  // If we got an orgId but no name, we'll fetch the name after auth check below
+  if (data.id)    orgId   = String(data.id);
+  if (data.name)  orgName = String(data.name);
+
+  // Fallback: if SDK gave no id, parse it from the parent page URL.
+  // Pipedrive org pages look like: https://company.pipedrive.com/organization/42
+  if (!orgId) {
+    const ref = document.referrer || (typeof parent !== "undefined" ? "" : "");
+    const fromRef = ref.match(/\/organization(?:s)?\/(\d+)/i);
+    if (fromRef) orgId = fromRef[1];
+    // Also try current URL (in case Pipedrive embeds with the path preserved)
+    const fromSelf = location.href.match(/\/organization(?:s)?\/(\d+)/i);
+    if (!orgId && fromSelf) orgId = fromSelf[1];
+  }
 
 } catch(e) {
   console.warn("SDK init failed:", e);
@@ -1951,57 +1950,43 @@ function renderNodeDealBadge(n) {
   if (!n.pdPersonId) return;
   const el = document.getElementById("nd-"+n.id);
   if (!el) return;
-  // Remove existing
   el.querySelector(".node-deals")?.remove();
 
   const deals = (dealsCache[n.pdPersonId]?.deals) || [];
   if (!deals.length) return;
 
-  // Group by status
+  const open = deals.filter(d => d.status === "open");
   const won  = deals.filter(d => d.status === "won");
   const lost = deals.filter(d => d.status === "lost");
-  const open = deals.filter(d => d.status === "open");
 
   const container = document.createElement("div");
   container.className = "node-deals";
 
-  // Show up to 2 badges, then a "+N more" if needed
+  // One colored dot-counter per status that has deals
   const groups = [
-    { list: open, cls: "open",  icon: `<svg viewBox="0 0 24 24"><circle cx="12" cy="12" r="4"/></svg>`,  label: "active" },
-    { list: won,  cls: "won",   icon: `<svg viewBox="0 0 24 24"><polyline points="20 6 9 17 4 12"/></svg>`, label: "won" },
-    { list: lost, cls: "lost",  icon: `<svg viewBox="0 0 24 24"><line x1="18" y1="6" x2="6" y2="18"/><line x1="6" y1="6" x2="18" y2="18"/></svg>`, label: "lost" },
+    { list: open, cls: "open",  label: "active"  },
+    { list: won,  cls: "won",   label: "won"     },
+    { list: lost, cls: "lost",  label: "lost"    },
   ].filter(g => g.list.length > 0);
 
-  let shown = 0;
-  groups.forEach(g => {
-    if (shown >= 2) return;
-    const badge = document.createElement("span");
-    badge.className = `deal-badge ${g.cls}`;
-    const title = g.list.length === 1
-      ? g.list[0].title
-      : `${g.list.length} ${g.label}`;
-    badge.innerHTML = g.icon + escHtml(truncate(title, 18));
-    badge.title = g.list.map(d=>d.title).join("");
-    badge.addEventListener("click", ev => {
-      ev.stopPropagation();
-      openDealPopover(n, ev.currentTarget);
-    });
-    container.appendChild(badge);
-    shown++;
+  groups.forEach((g, i) => {
+    if (i > 0) {
+      const sep = document.createElement("span");
+      sep.className = "deal-sep"; sep.textContent = "·";
+      container.appendChild(sep);
+    }
+    const counter = document.createElement("span");
+    counter.className = `deal-counter ${g.cls}`;
+    counter.innerHTML = `<span class="dc-dot"></span>${g.list.length} ${g.label}`;
+    counter.title = g.list.map(d => d.title).join("");
+    container.appendChild(counter);
   });
 
-  const remaining = deals.length - shown;
-  if (remaining > 0 && shown >= 2) {
-    const more = document.createElement("span");
-    more.className = "deal-badge-more";
-    more.textContent = `+${remaining}`;
-    more.title = `${remaining} more deal${remaining>1?"s":""}`;
-    more.addEventListener("click", ev => {
-      ev.stopPropagation();
-      openDealPopover(n, ev.currentTarget);
-    });
-    container.appendChild(more);
-  }
+  // Click anywhere on the deal bar opens the popover
+  container.addEventListener("click", ev => {
+    ev.stopPropagation();
+    openDealPopover(n, container);
+  });
 
   el.appendChild(container);
 }
@@ -2064,7 +2049,7 @@ window.closePopover = function() {
 
 // Close popover when clicking outside
 document.addEventListener("click", e => {
-  if (popoverOpen && !e.target.closest("#deal-popover") && !e.target.closest(".deal-badge") && !e.target.closest(".deal-badge-more")) {
+  if (popoverOpen && !e.target.closest("#deal-popover") && !e.target.closest(".node-deals")) {
     closePopover();
   }
 });
