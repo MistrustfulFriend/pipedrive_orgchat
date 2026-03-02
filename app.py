@@ -42,37 +42,8 @@ UPSTASH_URL = os.getenv("UPSTASH_REDIS_REST_URL", "").strip()
 UPSTASH_TOKEN = os.getenv("UPSTASH_REDIS_REST_TOKEN", "").strip()
 
 STATIC_DIR = str(BASE_DIR / "static")
-
-SENTINEL = "📊 [ORG_CHART_DATA_v1]"
-# Strip HTML tags so we can detect our sentinel even after Pipedrive
-# reformats the note content as rich text (e.g. wraps in <p>…</p>).
-import re as _re
-
-def _strip_html(text: str) -> str:
-    return _re.sub(r"<[^>]+>", "", text or "").replace("&nbsp;", " ").replace("&amp;", "&").replace("&#39;", "'").strip()
-
-def _note_contains_sentinel(content: str) -> bool:
-    """Return True if the note content contains our sentinel marker,
-    regardless of HTML wrapping that Pipedrive may have added."""
-    return SENTINEL in _strip_html(content)
-
-def _extract_chart_from_note(content: str) -> dict | None:
-    """Parse our sentinel-prefixed note, tolerating HTML wrapper tags."""
-    plain = _strip_html(content)
-    if SENTINEL not in plain:
-        return None
-    # Everything after the sentinel line
-    after = plain[plain.index(SENTINEL) + len(SENTINEL):].strip()
-    lines = after.split("\n", 1)
-    chart_name = "Org Chart"
-    chart_json = ""
-    if lines and lines[0].startswith("Name: "):
-        chart_name = lines[0][6:].strip()
-        chart_json = lines[1].strip() if len(lines) > 1 else ""
-    else:
-        chart_json = after.strip()
-    return {"chart": chart_json, "chartName": chart_name}
 STATE_TTL_SECONDS = 600
+
 
 
 def _missing_env(name: str) -> JSONResponse:
@@ -327,6 +298,47 @@ def api_status(companyId: str = ""):
 
 
 # ──────────────────────────────────────────────────────────────
+# Chart storage helpers  (Redis-first, in-memory fallback)
+# ──────────────────────────────────────────────────────────────
+# Key pattern:  oc:chart:{company_id}:{org_id}
+# Value:        JSON string  {"chartName": "...", "chart": "...{nodes/edges JSON}..."}
+# No TTL — chart data is permanent until explicitly overwritten.
+
+def _chart_key(company_id: str, org_id: str) -> str:
+    return f"oc:chart:{company_id}:{org_id}"
+
+
+def save_chart_data(company_id: str, org_id: str, chart_name: str, chart_json: str) -> bool:
+    key = _chart_key(company_id, org_id)
+    value = json.dumps({"chartName": chart_name, "chart": chart_json})
+    result = _redis(["SET", key, value])
+    if result is None:
+        # Redis not configured — fall back to in-memory store
+        _mem_store[key] = value
+    return True
+
+
+def load_chart_data(company_id: str, org_id: str) -> dict | None:
+    key = _chart_key(company_id, org_id)
+    raw = _redis(["GET", key])
+    if raw is None:
+        raw = _mem_store.get(key)
+    if not raw:
+        return None
+    try:
+        return json.loads(raw)
+    except Exception:
+        return None
+
+
+def delete_chart_data(company_id: str, org_id: str) -> bool:
+    key = _chart_key(company_id, org_id)
+    _redis(["DEL", key])
+    _mem_store.pop(key, None)
+    return True
+
+
+# ──────────────────────────────────────────────────────────────
 # Org Chart API
 # ──────────────────────────────────────────────────────────────
 @app.get("/api/orgchart/search")
@@ -363,7 +375,7 @@ def orgchart_search(q: str = "", companyId: str = ""):
 
 @app.post("/api/orgchart/save")
 async def orgchart_save(payload: dict):
-    org_id = str(payload.get("orgId", ""))
+    org_id     = str(payload.get("orgId", ""))
     company_id = str(payload.get("companyId", ""))
     chart_json = payload.get("chart", "")
     chart_name = payload.get("chartName", "Org Chart")
@@ -371,50 +383,14 @@ async def orgchart_save(payload: dict):
     if not org_id or not company_id or not chart_json:
         return JSONResponse({"error": "Missing required fields"}, status_code=400)
 
-    access_token = get_valid_token(company_id)
-    if not access_token:
+    # No Pipedrive token required for saving — the chart belongs to us now.
+    # We still validate the company has ever authenticated so random callers
+    # can't write arbitrary keys into our store.
+    if not get_valid_token(company_id):
         return JSONResponse({"error": "Not connected"}, status_code=401)
 
-    headers = {"Authorization": f"Bearer {access_token}"}
-    note_body = f"{SENTINEL}\nName: {chart_name}\n{chart_json}"
-
-    existing_id = None
-    nr = requests.get(
-        "https://api.pipedrive.com/v1/notes",
-        headers=headers,
-        params={"org_id": org_id, "limit": 50},
-        timeout=15,
-    )
-    if nr.status_code == 200:
-        for note in (nr.json().get("data") or []):
-            if _note_contains_sentinel(note.get("content") or ""):
-                existing_id = note["id"]
-                break
-
-    if existing_id:
-        r = requests.put(
-            f"https://api.pipedrive.com/v1/notes/{existing_id}",
-            headers=headers,
-            json={"content": note_body},
-            timeout=15,
-        )
-    else:
-        r = requests.post(
-            "https://api.pipedrive.com/v1/notes",
-            headers=headers,
-            json={
-                "content": note_body,
-                "org_id": int(org_id),
-                # Not pinned — pinned notes are more visible but users
-                # may not want this auto-pinned note cluttering the top.
-                "pinned_to_organization_flag": 0,
-            },
-            timeout=15,
-        )
-
-    if r.status_code in (200, 201):
-        return {"ok": True, "note_id": (r.json().get("data") or {}).get("id")}
-    return JSONResponse({"error": "Pipedrive error", "detail": r.text}, status_code=500)
+    save_chart_data(company_id, org_id, chart_name, chart_json)
+    return {"ok": True}
 
 
 @app.get("/api/orgchart/load")
@@ -422,27 +398,25 @@ def orgchart_load(orgId: str = "", companyId: str = ""):
     if not orgId or not companyId:
         return {}
 
-    access_token = get_valid_token(companyId)
-    if not access_token:
+    # Same light auth check
+    if not get_valid_token(companyId):
         return JSONResponse({"error": "Not connected"}, status_code=401)
 
-    headers = {"Authorization": f"Bearer {access_token}"}
-    r = requests.get(
-        "https://api.pipedrive.com/v1/notes",
-        headers=headers,
-        params={"org_id": orgId, "limit": 50},
-        timeout=15,
-    )
-    if r.status_code != 200:
-        return {}
-
-    for note in (r.json().get("data") or []):
-        content = note.get("content") or ""
-        result = _extract_chart_from_note(content)
-        if result:
-            return result
-
+    data = load_chart_data(companyId, orgId)
+    if data:
+        return data
     return {}
+
+
+@app.delete("/api/orgchart/delete")
+async def orgchart_delete(orgId: str = "", companyId: str = ""):
+    """Optional endpoint — wipe the stored chart for an org."""
+    if not orgId or not companyId:
+        return JSONResponse({"error": "Missing orgId or companyId"}, status_code=400)
+    if not get_valid_token(companyId):
+        return JSONResponse({"error": "Not connected"}, status_code=401)
+    delete_chart_data(companyId, orgId)
+    return {"ok": True}
 
 
 @app.get("/api/orgs/search")
