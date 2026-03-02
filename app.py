@@ -26,8 +26,11 @@ class IframeHeadersMiddleware(BaseHTTPMiddleware):
     """Remove X-Frame-Options and set permissive CSP so Pipedrive can embed us."""
     async def dispatch(self, request, call_next):
         response = await call_next(request)
-        # Allow framing by Pipedrive
-        response.headers.pop("x-frame-options", None)
+
+        # Remove X-Frame-Options (MutableHeaders has no .pop() here)
+        if "x-frame-options" in response.headers:
+            del response.headers["x-frame-options"]
+
         response.headers["content-security-policy"] = (
             "frame-ancestors https://app.pipedrive.com https://*.pipedrive.com 'self'"
         )
