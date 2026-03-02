@@ -899,27 +899,21 @@ let sdk       = null;
 // MUST complete — Pipedrive waits for it before showing the iframe.
 // Never timeout or skip it when inside an iframe.
 try {
-  sdk = await AppExtensionsSDK.initialize({ identifier: "ce57ff29-4b39-42a7-9868-f10a99f5d8a9" });
+  // Pipedrive passes a unique ?id= in the URL when loading the iframe.
+  // The SDK reads it automatically — do NOT hardcode the identifier.
+  sdk = await new AppExtensionsSDK().initialize();
 
-  // Get context from SDK — for a custom modal opened from an org page,
-  // userContext contains the current organisation's data
-  const ctx = sdk.userContext || {};
+  const ctx = sdk.userContext    || {};
   const u   = sdk.userIdentifier || {};
 
-  // companyId comes from userIdentifier
   if (u.companyId) companyId = String(u.companyId);
-
-  // orgId/orgName come from the record context when opened on an org page
-  if (ctx.id)   orgId   = String(ctx.id);
-  if (ctx.name) orgName = String(ctx.name);
-
-  // Also check userIdentifier for id/name as fallback
+  if (ctx.id)      orgId     = String(ctx.id);
+  if (ctx.name)    orgName   = String(ctx.name);
   if (!orgId   && u.id)   orgId   = String(u.id);
   if (!orgName && u.name) orgName = String(u.name);
 
 } catch(e) {
-  // Not inside Pipedrive — running standalone (direct URL access)
-  // URL params are used, already read above
+  // Not inside Pipedrive — standalone access via direct URL, use query params
   sdk = null;
 }
 
