@@ -290,7 +290,7 @@
     .node:hover { border-color: var(--border2); box-shadow: var(--shadow-md); z-index: 10; }
     .node.selected { border-color: var(--blue); box-shadow: 0 0 0 3px var(--blueDim), var(--shadow-md); }
     .node.dragging { cursor: grabbing; z-index: 50; box-shadow: var(--shadow-lg); transform: scale(1.02); }
-    .node.placeholder-node { border-style: dashed; border-color: rgba(124,58,237,0.4); background: rgba(124,58,237,0.02); }
+    .node.placeholder-node { border-style: dashed; border-color: rgba(124,58,237,0.4); background: rgba(124,58,237,0.06); }
     .node.placeholder-node:hover { border-color: var(--purple); }
 
     .node-header {
@@ -358,6 +358,15 @@
       overflow: hidden;
       text-overflow: ellipsis;
       white-space: nowrap;
+    }
+    .node-name-link {
+      cursor: pointer;
+    }
+    .node-name-link:hover {
+      color: var(--blue);
+      text-decoration: underline;
+      text-underline-offset: 2px;
+      text-decoration-thickness: 1px;
     }
     .node-title {
       font-size: 11px;
@@ -763,7 +772,7 @@
       display: inline-flex; align-items: center; gap: 3px;
       padding: 2px 7px 2px 5px;
       border-radius: 20px;
-      font-size: 10px; font-weight: 700;
+      font-size: 10px; font-weight: 500;
       letter-spacing: 0.01em;
       transition: filter .1s;
       flex-shrink: 0;
@@ -967,11 +976,14 @@
 
     <svg id="svg-layer" xmlns="http://www.w3.org/2000/svg">
       <defs>
-        <marker id="arr" markerWidth="8" markerHeight="6" refX="7" refY="3" orient="auto">
-          <polygon points="0 0, 8 3, 0 6" fill="#b0bac8"/>
+        <!-- markerUnits=userSpaceOnUse → size in SVG px, not stroke-width multiples.
+             Arrow is 9px long; tip is at x=9 (refX=9). Path endpoint is pulled
+             back 9px in edgePath so tip lands exactly on the node border. -->
+        <marker id="arr" markerWidth="9" markerHeight="8" refX="9" refY="4" orient="auto" markerUnits="userSpaceOnUse">
+          <polygon points="0 0.5, 9 4, 0 7.5" fill="#b0bac8"/>
         </marker>
-        <marker id="arr-blue" markerWidth="8" markerHeight="6" refX="7" refY="3" orient="auto">
-          <polygon points="0 0, 8 3, 0 6" fill="#1864d4"/>
+        <marker id="arr-blue" markerWidth="9" markerHeight="8" refX="9" refY="4" orient="auto" markerUnits="userSpaceOnUse">
+          <polygon points="0 0.5, 9 4, 0 7.5" fill="#1864d4"/>
         </marker>
       </defs>
       <!-- Single transform group — pan+zoom applied here once for both edges and drag line -->
@@ -1091,6 +1103,7 @@ const _p      = new URLSearchParams(location.search);
 let companyId = _p.get("companyId") || "";
 let orgId     = "";
 let orgName   = "";
+let pdDomain  = "";   // e.g. "eacesgmbh-sandbox.pipedrive.com" — for deep links
 let sdk       = null;
 
 try {
@@ -1110,15 +1123,16 @@ try {
   if (data.id)    orgId   = String(data.id);
   if (data.name)  orgName = String(data.name);
 
-  // Fallback: if SDK gave no id, parse it from the parent page URL.
-  // Pipedrive org pages look like: https://company.pipedrive.com/organization/42
+  // Extract domain from referrer for deep links (person/deal pages)
+  const refUrl = document.referrer || "";
+  const domM = refUrl.match(/https?:\/\/([a-z0-9-]+\.pipedrive\.com)/i);
+  if (domM) pdDomain = domM[1];
+
+  // If SDK gave no orgId, try parsing it from the referrer URL
+  // Pipedrive org pages: https://company.pipedrive.com/organization/42
   if (!orgId) {
-    const ref = document.referrer || (typeof parent !== "undefined" ? "" : "");
-    const fromRef = ref.match(/\/organization(?:s)?\/(\d+)/i);
+    const fromRef  = refUrl.match(/\/organization\/(\d+)/i);
     if (fromRef) orgId = fromRef[1];
-    // Also try current URL (in case Pipedrive embeds with the path preserved)
-    const fromSelf = location.href.match(/\/organization(?:s)?\/(\d+)/i);
-    if (!orgId && fromSelf) orgId = fromSelf[1];
   }
 
 } catch(e) {
@@ -1204,17 +1218,49 @@ canvasEl.addEventListener("wheel", e => {
 applyTransform();
 
 /* ── Load org from context ───────────────────────────────────── */
-if (orgId) {
-  // If SDK gave us the ID but not the name (common in Pipedrive), fetch it
-  if (!orgName && companyId) {
+async function tryAutoLoad() {
+  if (!companyId) return;
+
+  // Case 1: SDK or URL gave us an orgId — fetch name if missing, load
+  if (orgId) {
+    if (!orgName) {
+      try {
+        const r = await fetch(`/api/org/by-id?orgId=${orgId}&companyId=${companyId}`).then(x=>x.json());
+        if (r.org?.name) orgName = r.org.name;
+      } catch(e) {}
+    }
+    document.getElementById("org-picker-label").textContent = orgName || `Org #${orgId}`;
+    await loadChart();
+    return;
+  }
+
+  // Case 2: No orgId — try to match by searching the org name found in the
+  // Pipedrive page title. Titles look like "EACES GmbH — Pipedrive" or
+  // "Contacts - EACES GmbH | Pipedrive". Extract the org name and search.
+  const rawTitle = document.title || "";
+  // Strip common Pipedrive suffixes and separators
+  const candidate = rawTitle
+    .replace(/[-–|]\s*(pipedrive|contacts|deals|activities).*/i, "")
+    .replace(/(pipedrive|contacts|deals|activities)\s*[-–|].*/i, "")
+    .trim();
+
+  if (candidate.length > 1) {
     try {
-      const r = await fetch(`/api/org/by-id?orgId=${orgId}&companyId=${companyId}`).then(x=>x.json());
-      if (r.org && r.org.name) orgName = r.org.name;
+      const r = await fetch(`/api/orgs/search?q=${encodeURIComponent(candidate)}&companyId=${companyId}`).then(x=>x.json());
+      const orgs = r.orgs || [];
+      // Exact or case-insensitive match wins; otherwise pick first result
+      const exact = orgs.find(o => o.name.toLowerCase() === candidate.toLowerCase());
+      const match = exact || (orgs.length === 1 ? orgs[0] : null);
+      if (match) {
+        orgId   = String(match.id);
+        orgName = match.name;
+        document.getElementById("org-picker-label").textContent = orgName;
+        await loadChart();
+      }
     } catch(e) {}
   }
-  document.getElementById("org-picker-label").textContent = orgName || `Org #${orgId}`;
-  await loadChart();
 }
+await tryAutoLoad();
 
 /* ── Render ──────────────────────────────────────────────────── */
 function renderAll() {
@@ -1255,7 +1301,9 @@ function makeNodeEl(n) {
     <div class="node-body">
       <div class="node-avatar ${n.placeholder?'ghost':''}">${n.placeholder?"?":initials(n.name)}</div>
       <div class="node-info">
-        <div class="node-name">${n.name||"Unknown"}</div>
+        ${n.pdPersonId
+          ? `<div class="node-name node-name-link" onclick="openPersonInPD('${n.pdPersonId}',event)">${n.name||"Unknown"} <svg viewBox="0 0 24 24" style="width:8px;height:8px;stroke:currentColor;fill:none;stroke-width:2.5;stroke-linecap:round;stroke-linejoin:round;margin-left:1px;vertical-align:middle;opacity:0.45"><path d="M18 13v6a2 2 0 01-2 2H5a2 2 0 01-2-2V8a2 2 0 012-2h6"/><polyline points="15 3 21 3 21 9"/><line x1="10" y1="14" x2="21" y2="3"/></svg></div>`
+          : `<div class="node-name">${n.name||"Unknown"}</div>`}
         <div class="node-title">${n.title||""}</div>
       </div>
     </div>
@@ -1282,21 +1330,24 @@ function nodeW(n) { return document.getElementById("nd-"+n.id)?.offsetWidth  || 
 function nodeH(n) { return document.getElementById("nd-"+n.id)?.offsetHeight || 100; }
 
 /* ── Edge elements ───────────────────────────────────────────── */
-function edgePath(f, t) {
+const ARROW_LEN = 9; // must match marker refX above
+
+function edgePath(f, t, noArrow) {
   const fw = nodeW(f), fh = nodeH(f), tw = nodeW(t), th = nodeH(t);
   const fcx = f.x + fw/2, fcy = f.y + fh/2;
   const tcx = t.x + tw/2, tcy = t.y + th/2;
   const dx = tcx - fcx, dy = tcy - fcy;
+  const back = noArrow ? 0 : ARROW_LEN; // pull endpoint back so tip lands on border
   let x1, y1, x2, y2, cpx1, cpy1, cpx2, cpy2;
   if (Math.abs(dx) > Math.abs(dy)) {
-    if (dx > 0) { x1 = f.x+fw; y1 = fcy; x2 = t.x;    y2 = tcy; }
-    else        { x1 = f.x;    y1 = fcy; x2 = t.x+tw;  y2 = tcy; }
+    if (dx > 0) { x1 = f.x+fw; y1 = fcy; x2 = t.x   - back; y2 = tcy; }
+    else        { x1 = f.x;    y1 = fcy; x2 = t.x+tw + back; y2 = tcy; }
     const g = Math.abs(x2-x1)*0.5;
     cpx1 = x1+(dx>0?g:-g); cpy1 = y1;
     cpx2 = x2-(dx>0?g:-g); cpy2 = y2;
   } else {
-    if (dy > 0) { x1 = fcx; y1 = f.y+fh; x2 = tcx; y2 = t.y;    }
-    else        { x1 = fcx; y1 = f.y;     x2 = tcx; y2 = t.y+th; }
+    if (dy > 0) { x1 = fcx; y1 = f.y+fh; x2 = tcx; y2 = t.y    - back; }
+    else        { x1 = fcx; y1 = f.y;     x2 = tcx; y2 = t.y+th + back; }
     const g = Math.abs(y2-y1)*0.5;
     cpx1 = x1; cpy1 = y1+(dy>0?g:-g);
     cpx2 = x2; cpy2 = y2-(dy>0?g:-g);
@@ -1305,23 +1356,12 @@ function edgePath(f, t) {
 }
 
 function edgeMidpoint(f, t) {
-  const fw = nodeW(f), fh = nodeH(f), tw = nodeW(t), th = nodeH(t);
-  const fcx = f.x+fw/2, fcy = f.y+fh/2, tcx = t.x+tw/2, tcy = t.y+th/2;
-  const dx = tcx-fcx, dy = tcy-fcy;
-  let x1,y1,x2,y2;
-  if (Math.abs(dx) > Math.abs(dy)) {
-    if (dx>0) { x1=f.x+fw; y1=fcy; x2=t.x;   y2=tcy; }
-    else      { x1=f.x;    y1=fcy; x2=t.x+tw; y2=tcy; }
-  } else {
-    if (dy>0) { x1=fcx; y1=f.y+fh; x2=tcx; y2=t.y;    }
-    else      { x1=fcx; y1=f.y;    x2=tcx; y2=t.y+th;  }
-  }
-  const cp = Math.abs((Math.abs(dx)>Math.abs(dy)?y2-y1:x2-x1))*0.5;
-  // Cubic bezier midpoint at t=0.5
-  const c1x = Math.abs(dx)>Math.abs(dy) ? x1+(dx>0?Math.abs(x2-x1)*0.5:-Math.abs(x2-x1)*0.5) : x1;
-  const c2x = Math.abs(dx)>Math.abs(dy) ? x2-(dx>0?Math.abs(x2-x1)*0.5:-Math.abs(x2-x1)*0.5) : x2;
-  const c1y = Math.abs(dx)>Math.abs(dy) ? y1 : y1+(dy>0?Math.abs(y2-y1)*0.5:-Math.abs(y2-y1)*0.5);
-  const c2y = Math.abs(dx)>Math.abs(dy) ? y2 : y2-(dy>0?Math.abs(y2-y1)*0.5:-Math.abs(y2-y1)*0.5);
+  // Use full-length path (noArrow) for midpoint — button sits at visual center
+  const d = edgePath(f, t, true);
+  const m = d.match(/M([\d.]+),([\d.]+) C([\d.]+),([\d.]+) ([\d.]+),([\d.]+) ([\d.]+),([\d.]+)/);
+  if (!m) return [f.x, f.y];
+  const [,x1,y1,c1x,c1y,c2x,c2y,x2,y2] = m.map(Number);
+  // Cubic bezier at t=0.5
   const mx = 0.125*x1 + 0.375*c1x + 0.375*c2x + 0.125*x2;
   const my = 0.125*y1 + 0.375*c1y + 0.375*c2y + 0.125*y2;
   return [mx, my];
@@ -1358,7 +1398,7 @@ function makeEdgeEl(e) {
   // Wide invisible hit area — stroke must be non-zero opacity for hit testing
   const hit = svgEl("path");
   hit.setAttribute("class","edge-hit");
-  hit.setAttribute("d", edgePath(f,t));
+  hit.setAttribute("d", edgePath(f,t,true)); // full length for hit area
   hit.setAttribute("pointer-events","stroke");
 
   // Visible line
@@ -2037,9 +2077,15 @@ function renderPopoverDeals(deals) {
   }).join("");
 }
 
+window.openPersonInPD = function(personId, ev) {
+  if (ev) { ev.stopPropagation(); ev.preventDefault(); }
+  const base = pdDomain ? `https://${pdDomain}` : "https://app.pipedrive.com";
+  window.open(`${base}/person/${personId}`, "_blank");
+};
+
 window.openDealInPipedrive = function(dealId) {
-  // Open the deal in Pipedrive — works both standalone and inside the iframe
-  window.open(`https://app.pipedrive.com/deal/${dealId}`, "_blank");
+  const base = pdDomain ? `https://${pdDomain}` : "https://app.pipedrive.com";
+  window.open(`${base}/deal/${dealId}`, "_blank");
 };
 
 window.closePopover = function() {
