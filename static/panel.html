@@ -667,6 +667,8 @@
       justify-content: center;
       backdrop-filter: blur(3px);
       animation: fadeIn .15s ease;
+      overflow: auto;
+      padding: 20px;
     }
     @keyframes fadeIn { from{opacity:0} to{opacity:1} }
     @keyframes slideUp { from{opacity:0;transform:translateY(10px)} to{opacity:1;transform:translateY(0)} }
@@ -676,10 +678,27 @@
       border: 1px solid var(--border);
       border-radius: 12px;
       width: 400px;
+      min-width: 280px;
       max-width: 96vw;
+      max-height: 90vh;
       box-shadow: 0 20px 60px rgba(0,0,0,0.7);
       animation: slideUp .2s ease;
       overflow: hidden;
+      display: flex;
+      flex-direction: column;
+      resize: both;
+      position: relative;
+    }
+    .modal::after {
+      content: '';
+      position: absolute;
+      right: 5px; bottom: 5px;
+      width: 10px; height: 10px;
+      border-right: 2px solid var(--border2);
+      border-bottom: 2px solid var(--border2);
+      border-radius: 1px;
+      pointer-events: none;
+      opacity: 0.6;
     }
     .modal-hd {
       display: flex;
@@ -700,7 +719,7 @@
     }
     .modal-x:hover { background: var(--bg4); color: var(--text); }
     .modal-x svg { width: 14px; height: 14px; stroke: currentColor; fill: none; stroke-width: 2; stroke-linecap: round; stroke-linejoin: round; }
-    .modal-body { padding: 14px 16px; }
+    .modal-body { padding: 14px 16px; overflow-y: auto; flex: 1; }
     .modal-ft { padding: 10px 16px; border-top: 1px solid var(--border); display: flex; gap: 8px; justify-content: flex-end; }
 
     .m-tabs { display: flex; gap: 3px; background: var(--bg3); padding: 3px; border-radius: 7px; margin-bottom: 14px; border: 1px solid var(--border); }
@@ -2473,7 +2492,7 @@ function _confirmAdd() {
     if (!selectedPerson) return;
     const n = {
       id: String(++nidC), name: selectedPerson.name,
-      title: selectedPerson.title||"", dept: selectedPerson.org_name||"",
+      title: selectedPerson.title||"", dept: selectedPerson.dept||selectedPerson.org_name||"",
       placeholder: false, pdPersonId: String(selectedPerson.pdId),
       x: 80+Math.random()*300, y: 80+Math.random()*200,
     };
@@ -2969,9 +2988,10 @@ async function refreshPersonNamesFromPD() {
   await Promise.all(linked.map(async n => {
     try {
       const r = await fetch(`/api/person/info?personId=${n.pdPersonId}&companyId=${companyId}`).then(x=>x.json());
-      if (r.person && r.person.name && r.person.name !== n.name) {
-        nodes[n.id].name = r.person.name;
-        changed = true;
+      if (r.person) {
+        if (r.person.name  && r.person.name  !== n.name)  { nodes[n.id].name  = r.person.name;  changed = true; }
+        if (r.person.title !== undefined && r.person.title !== n.title) { nodes[n.id].title = r.person.title; changed = true; }
+        if (r.person.dept  !== undefined && r.person.dept  !== n.dept)  { nodes[n.id].dept  = r.person.dept;  changed = true; }
       }
     } catch(e) {}
   }));

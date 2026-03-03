@@ -362,14 +362,31 @@ def orgchart_search(q: str = "", companyId: str = ""):
     for item in items:
         p = item.get("item", {}) or {}
         org = p.get("organization") or {}
-        people.append(
-            {
-                "pdId": p.get("id"),
-                "name": p.get("name", ""),
-                "title": p.get("job_title") or "",
-                "org_name": org.get("name", "") if isinstance(org, dict) else "",
-            }
-        )
+        person_id = p.get("id")
+        # Fetch full person record to get custom department + position fields
+        title = ""
+        dept  = ""
+        if person_id:
+            detail = requests.get(
+                f"https://api.pipedrive.com/v1/persons/{person_id}",
+                headers=headers,
+                timeout=10,
+            )
+            if detail.status_code == 200:
+                d = detail.json().get("data") or {}
+                fields = _extract_person_fields(d)
+                title = fields["title"]
+                dept  = fields["dept"]
+        # Fallback: org name as dept if custom field empty
+        if not dept and isinstance(org, dict):
+            dept = org.get("name", "")
+        people.append({
+            "pdId":     person_id,
+            "name":     p.get("name", ""),
+            "title":    title,
+            "dept":     dept,
+            "org_name": org.get("name", "") if isinstance(org, dict) else "",
+        })
     return {"people": people}
 
 
@@ -515,9 +532,29 @@ def orgs_list(companyId: str = "", limit: int = 100, start: int = 0):
     return {"orgs": orgs, "more": more}
 
 
+# Custom field API keys for department and position
+CUSTOM_FIELD_DEPT     = "37ddb34fa55599acc297b6177780af2175a3fdb0"
+CUSTOM_FIELD_POSITION = "88a1c06b495aaf64eabb85bc4291e6146ae2ddc4"
+
+def _extract_person_fields(data: dict) -> dict:
+    """Extract name, position (title) and department from a Pipedrive person data dict."""
+    position   = data.get(CUSTOM_FIELD_POSITION) or data.get("job_title") or ""
+    department = data.get(CUSTOM_FIELD_DEPT) or ""
+    # Custom fields may return a dict with a 'value' key (enum/option fields)
+    if isinstance(position, dict):
+        position = position.get("label") or position.get("value") or ""
+    if isinstance(department, dict):
+        department = department.get("label") or department.get("value") or ""
+    return {
+        "id":    data.get("id"),
+        "name":  data.get("name", ""),
+        "title": str(position),
+        "dept":  str(department),
+    }
+
 @app.get("/api/person/info")
 def person_info(personId: str = "", companyId: str = ""):
-    """Fetch current name and title for a Pipedrive person."""
+    """Fetch current name, position and department for a Pipedrive person."""
     if not personId or not companyId:
         return JSONResponse({"error": "Missing personId or companyId"}, status_code=400)
     access_token = get_valid_token(companyId)
@@ -532,13 +569,7 @@ def person_info(personId: str = "", companyId: str = ""):
     if r.status_code != 200:
         return {"person": None}
     data = r.json().get("data") or {}
-    return {
-        "person": {
-            "id": data.get("id"),
-            "name": data.get("name", ""),
-            "title": data.get("job_title") or "",
-        }
-    }
+    return {"person": _extract_person_fields(data)}
 
 
 @app.post("/api/person/update-name")
