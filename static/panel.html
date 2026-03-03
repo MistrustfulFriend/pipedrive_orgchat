@@ -219,6 +219,41 @@
 
     .sb-divider { height: 1px; background: var(--border); margin: 6px 0; }
 
+    /* Sidebar org list */
+    .sb-section-hd {
+      display: flex; align-items: center; justify-content: space-between;
+      padding: 10px 10px 4px;
+      font-size: 10px; font-weight: 600; text-transform: uppercase;
+      letter-spacing: 0.07em; color: var(--text3); font-family: var(--mono);
+    }
+    .sb-sec-refresh {
+      border: none; background: none; cursor: pointer; padding: 2px;
+      color: var(--text3); border-radius: 4px; display: flex;
+    }
+    .sb-sec-refresh:hover { background: var(--bg4); color: var(--text2); }
+    .sb-sec-refresh svg { width: 11px; height: 11px; stroke: currentColor; fill: none; stroke-width: 2; stroke-linecap: round; stroke-linejoin: round; }
+    .sb-org-search-wrap {
+      display: flex; align-items: center; gap: 6px;
+      margin: 2px 8px 4px;
+      background: var(--bg3); border: 1px solid var(--border);
+      border-radius: 6px; padding: 4px 8px;
+    }
+    .sb-org-search-wrap svg { width: 11px; height: 11px; stroke: var(--text3); fill: none; stroke-width: 2; stroke-linecap: round; flex-shrink: 0; }
+    #sb-org-search {
+      border: none; background: none; outline: none; font-family: var(--font);
+      font-size: 11px; color: var(--text); width: 100%;
+    }
+    #sb-org-list { overflow-y: auto; max-height: 180px; }
+    .sb-org-item {
+      display: flex; align-items: center; gap: 7px;
+      padding: 5px 10px; cursor: pointer; font-size: 11.5px;
+      color: var(--text2); border-radius: 4px; margin: 1px 4px;
+      transition: background .1s;
+    }
+    .sb-org-item:hover { background: var(--bg4); color: var(--text); }
+    .sb-org-item.active { background: var(--greenDim); color: var(--green); font-weight: 600; }
+    .sb-org-item svg { width: 12px; height: 12px; stroke: currentColor; fill: none; stroke-width: 2; stroke-linecap: round; stroke-linejoin: round; flex-shrink: 0; }
+
     /* Node palette */
     .palette-node {
       margin: 4px 8px;
@@ -942,12 +977,31 @@
 
   <!-- Sidebar -->
   <div id="sidebar">
+
+    <!-- Organisations quick-list -->
+    <div class="sb-section-hd">
+      <span>Organisations</span>
+      <button class="sb-sec-refresh" onclick="loadOrgList()" title="Refresh">
+        <svg viewBox="0 0 24 24"><polyline points="23 4 23 10 17 10"/><path d="M20.49 15a9 9 0 1 1-2.12-9.36L23 10"/></svg>
+      </button>
+    </div>
+    <div class="sb-org-search-wrap">
+      <svg viewBox="0 0 24 24"><circle cx="11" cy="11" r="8"/><line x1="21" y1="21" x2="16.65" y2="16.65"/></svg>
+      <input id="sb-org-search" placeholder="Filter…" oninput="filterOrgList(this.value)" autocomplete="off"/>
+    </div>
+    <div id="sb-org-list"><div class="sb-deals-empty">Loading…</div></div>
+
+    <div class="sb-divider"></div>
+
+    <!-- Deals -->
     <div class="sb-section">Deals</div>
     <div id="sb-deals-body">
       <div class="sb-deals-empty">Load a chart to see deals</div>
     </div>
 
     <div class="sb-divider"></div>
+
+    <!-- Canvas actions -->
     <div class="sb-section">Canvas</div>
     <button class="sb-btn" onclick="fitView()">
       <svg viewBox="0 0 24 24"><path d="M8 3H5a2 2 0 00-2 2v3"/><path d="M21 8V5a2 2 0 00-2-2h-3"/><path d="M3 16v3a2 2 0 002 2h3"/><path d="M16 21h3a2 2 0 002-2v-3"/></svg>
@@ -959,10 +1013,10 @@
     </button>
     <div class="sb-divider"></div>
     <div style="padding:6px 10px 10px; font-size:11px; color:var(--text3); line-height:1.7;">
-      Hover node → drag blue port to connect<br>
-      Shift+click or drag canvas to multi-select<br>
-      Hover line → ✕ delete · ⇄ reroute<br>
-      Delete key removes selected nodes
+      Drag canvas to pan · Scroll to zoom<br>
+      Space+drag or middle-click to pan<br>
+      Hover node → drag port to connect<br>
+      Hover line → ✕ delete · ⇄ reroute
     </div>
   </div>
 
@@ -976,14 +1030,15 @@
 
     <svg id="svg-layer" xmlns="http://www.w3.org/2000/svg">
       <defs>
-        <!-- markerUnits=userSpaceOnUse → size in SVG px, not stroke-width multiples.
-             Arrow is 9px long; tip is at x=9 (refX=9). Path endpoint is pulled
-             back 9px in edgePath so tip lands exactly on the node border. -->
-        <marker id="arr" markerWidth="9" markerHeight="8" refX="9" refY="4" orient="auto" markerUnits="userSpaceOnUse">
-          <polygon points="0 0.5, 9 4, 0 7.5" fill="#b0bac8"/>
+        <!-- strokeWidth units (default): rendered size = markerWidth * stroke-width.
+             stroke-width=2, markerWidth=6 → 12 logical units wide.
+             Tip of polygon is at x=6 (markerWidth). refX=6 puts tip at path endpoint.
+             No path shortening needed — tip lands exactly on node border. -->
+        <marker id="arr" markerWidth="6" markerHeight="5" refX="6" refY="2.5" orient="auto">
+          <polygon points="0 0, 6 2.5, 0 5" fill="#b0bac8"/>
         </marker>
-        <marker id="arr-blue" markerWidth="9" markerHeight="8" refX="9" refY="4" orient="auto" markerUnits="userSpaceOnUse">
-          <polygon points="0 0.5, 9 4, 0 7.5" fill="#1864d4"/>
+        <marker id="arr-blue" markerWidth="6" markerHeight="5" refX="6" refY="2.5" orient="auto">
+          <polygon points="0 0, 6 2.5, 0 5" fill="#1864d4"/>
         </marker>
       </defs>
       <!-- Single transform group — pan+zoom applied here once for both edges and drag line -->
@@ -1210,6 +1265,7 @@ function zoomBy(delta, cx, cy) {
 
 document.getElementById("zoom-in-btn").addEventListener("click",  () => zoomBy(+0.15));
 document.getElementById("zoom-out-btn").addEventListener("click", () => zoomBy(-0.15));
+canvasEl.addEventListener("contextmenu", e => e.preventDefault());
 canvasEl.addEventListener("wheel", e => {
   e.preventDefault();
   zoomBy(e.deltaY < 0 ? +0.1 : -0.1, e.clientX, e.clientY);
@@ -1231,6 +1287,7 @@ async function tryAutoLoad() {
     }
     document.getElementById("org-picker-label").textContent = orgName || `Org #${orgId}`;
     await loadChart();
+    fitView();
     return;
   }
 
@@ -1256,6 +1313,7 @@ async function tryAutoLoad() {
         orgName = match.name;
         document.getElementById("org-picker-label").textContent = orgName;
         await loadChart();
+        fitView();
       }
     } catch(e) {}
   }
@@ -1330,24 +1388,23 @@ function nodeW(n) { return document.getElementById("nd-"+n.id)?.offsetWidth  || 
 function nodeH(n) { return document.getElementById("nd-"+n.id)?.offsetHeight || 100; }
 
 /* ── Edge elements ───────────────────────────────────────────── */
-const ARROW_LEN = 9; // must match marker refX above
-
-function edgePath(f, t, noArrow) {
+function edgePath(f, t) {
+  // Path terminates exactly at node border. With refX=markerWidth on the marker,
+  // the arrowhead tip lands precisely on the endpoint — no shortening needed.
   const fw = nodeW(f), fh = nodeH(f), tw = nodeW(t), th = nodeH(t);
   const fcx = f.x + fw/2, fcy = f.y + fh/2;
   const tcx = t.x + tw/2, tcy = t.y + th/2;
   const dx = tcx - fcx, dy = tcy - fcy;
-  const back = noArrow ? 0 : ARROW_LEN; // pull endpoint back so tip lands on border
   let x1, y1, x2, y2, cpx1, cpy1, cpx2, cpy2;
   if (Math.abs(dx) > Math.abs(dy)) {
-    if (dx > 0) { x1 = f.x+fw; y1 = fcy; x2 = t.x   - back; y2 = tcy; }
-    else        { x1 = f.x;    y1 = fcy; x2 = t.x+tw + back; y2 = tcy; }
+    if (dx > 0) { x1 = f.x+fw; y1 = fcy; x2 = t.x;   y2 = tcy; }
+    else        { x1 = f.x;    y1 = fcy; x2 = t.x+tw; y2 = tcy; }
     const g = Math.abs(x2-x1)*0.5;
     cpx1 = x1+(dx>0?g:-g); cpy1 = y1;
     cpx2 = x2-(dx>0?g:-g); cpy2 = y2;
   } else {
-    if (dy > 0) { x1 = fcx; y1 = f.y+fh; x2 = tcx; y2 = t.y    - back; }
-    else        { x1 = fcx; y1 = f.y;     x2 = tcx; y2 = t.y+th + back; }
+    if (dy > 0) { x1 = fcx; y1 = f.y+fh; x2 = tcx; y2 = t.y;    }
+    else        { x1 = fcx; y1 = f.y;     x2 = tcx; y2 = t.y+th; }
     const g = Math.abs(y2-y1)*0.5;
     cpx1 = x1; cpy1 = y1+(dy>0?g:-g);
     cpx2 = x2; cpy2 = y2-(dy>0?g:-g);
@@ -1357,7 +1414,7 @@ function edgePath(f, t, noArrow) {
 
 function edgeMidpoint(f, t) {
   // Use full-length path (noArrow) for midpoint — button sits at visual center
-  const d = edgePath(f, t, true);
+  const d = edgePath(f, t);
   const m = d.match(/M([\d.]+),([\d.]+) C([\d.]+),([\d.]+) ([\d.]+),([\d.]+) ([\d.]+),([\d.]+)/);
   if (!m) return [f.x, f.y];
   const [,x1,y1,c1x,c1y,c2x,c2y,x2,y2] = m.map(Number);
@@ -1398,7 +1455,7 @@ function makeEdgeEl(e) {
   // Wide invisible hit area — stroke must be non-zero opacity for hit testing
   const hit = svgEl("path");
   hit.setAttribute("class","edge-hit");
-  hit.setAttribute("d", edgePath(f,t,true)); // full length for hit area
+  hit.setAttribute("d", edgePath(f,t));
   hit.setAttribute("pointer-events","stroke");
 
   // Visible line
@@ -1659,6 +1716,18 @@ let selStart = null;
 
 canvasEl.addEventListener("mousedown", e => {
   if (e.target.closest(".node") || e.target.closest("#zoom-controls")) return;
+  // Middle-click or Space+drag OR right-click → pan the canvas
+  const isPan = e.button === 1 || e.button === 2 || spaceDown;
+  if (isPan) {
+    e.preventDefault();
+    const startX = e.clientX - panX, startY = e.clientY - panY;
+    canvasEl.style.cursor = "grabbing";
+    const onMove = ev => { panX = ev.clientX - startX; panY = ev.clientY - startY; applyTransform(); };
+    const onUp   = ()  => { canvasEl.style.cursor = ""; document.removeEventListener("mousemove", onMove); document.removeEventListener("mouseup", onUp); };
+    document.addEventListener("mousemove", onMove);
+    document.addEventListener("mouseup",   onUp);
+    return;
+  }
   if (e.target.closest(".edge-group")) return;
   const rect = canvasEl.getBoundingClientRect();
   selStart = { x: e.clientX - rect.left, y: e.clientY - rect.top };
@@ -1732,12 +1801,16 @@ window.openEdit = function(nid) {
 
 window.confirmEdit = function() {
   const n = nodes[editNodeId];
-  n.name  = document.getElementById("e-name").value.trim()  || n.name;
+  const newName = document.getElementById("e-name").value.trim() || n.name;
+  const nameChanged = newName !== n.name;
+  n.name  = newName;
   n.title = document.getElementById("e-title").value.trim();
   n.dept  = document.getElementById("e-dept").value.trim();
   document.getElementById("nd-"+n.id)?.remove();
   makeNodeEl(n); refreshNodeEdges(n.id);
   markDirty(); closeModal("modal-edit");
+  // Push name change to Pipedrive if this is a linked person
+  if (nameChanged && n.pdPersonId) syncPersonNameToPD(n.id, n.name);
 };
 
 /* ── Add modal ───────────────────────────────────────────────── */
@@ -1921,6 +1994,7 @@ async function loadChart() {
       renderAll();
       setStatus(`Loaded: ${orgName||orgId}`);
       fetchAllDeals(); // load deal badges after chart renders
+      refreshPersonNamesFromPD(); // sync names from Pipedrive
     } else {
       setStatus("No saved chart — start building!");
     }
@@ -2142,6 +2216,90 @@ function fmtVal(v) {
   return Number(v).toLocaleString(undefined, {maximumFractionDigits:0});
 }
 
+/* ── Org list in sidebar ─────────────────────────────────────── */
+let allOrgs = [];
+
+async function loadOrgList() {
+  if (!companyId) return;
+  const el = document.getElementById("sb-org-list");
+  el.innerHTML = '<div class="sb-deals-empty">Loading…</div>';
+  try {
+    // Fetch first 50 orgs sorted by name — enough for a quick-pick list
+    const r = await fetch(`/api/orgs/search?q=&companyId=${companyId}&limit=50`).then(x=>x.json());
+    allOrgs = r.orgs || [];
+    renderOrgList(allOrgs);
+  } catch(e) {
+    el.innerHTML = '<div class="sb-deals-empty">Could not load</div>';
+  }
+}
+
+function renderOrgList(orgs) {
+  const el = document.getElementById("sb-org-list");
+  if (!orgs.length) { el.innerHTML = '<div class="sb-deals-empty">No results</div>'; return; }
+  el.innerHTML = orgs.map(o => {
+    const active = String(o.id) === String(orgId);
+    return `<div class="sb-org-item${active?' active':''}" onclick="selectOrgFromList(${o.id}, ${JSON.stringify(o.name).replace(/"/g,'&quot;')})">
+      <svg viewBox="0 0 24 24"><path d="M3 9l9-7 9 7v11a2 2 0 01-2 2H5a2 2 0 01-2-2z"/></svg>
+      ${escHtml(o.name)}
+    </div>`;
+  }).join("");
+}
+
+function filterOrgList(q) {
+  const filtered = q ? allOrgs.filter(o => o.name.toLowerCase().includes(q.toLowerCase())) : allOrgs;
+  renderOrgList(filtered);
+}
+
+async function selectOrgFromList(id, name) {
+  orgId = String(id); orgName = name;
+  document.getElementById("org-picker-label").textContent = orgName;
+  renderOrgList(allOrgs); // refresh active state
+  await loadChart();
+  fitView();
+}
+
+// Load org list once companyId is known
+if (companyId) loadOrgList();
+
+/* ── Name sync with Pipedrive ────────────────────────────────── */
+// When user edits a name in the orgchart, push it to Pipedrive and update locally.
+// Also: on chart load, refresh person names from Pipedrive.
+
+async function syncPersonNameToPD(nodeId, newName) {
+  const n = nodes[nodeId];
+  if (!n || !n.pdPersonId || !companyId) return;
+  try {
+    const r = await fetch(`/api/person/update-name`, {
+      method: "POST",
+      headers: { "Content-Type": "application/json" },
+      body: JSON.stringify({ personId: n.pdPersonId, name: newName, companyId })
+    }).then(x => x.json());
+    if (r.ok) {
+      setStatus("Name updated in Pipedrive");
+    } else {
+      setStatus("Name update failed", true);
+    }
+  } catch(e) {
+    setStatus("Name sync error", true);
+  }
+}
+
+async function refreshPersonNamesFromPD() {
+  const linked = Object.values(nodes).filter(n => n.pdPersonId && !n.placeholder);
+  if (!linked.length || !companyId) return;
+  let changed = false;
+  await Promise.all(linked.map(async n => {
+    try {
+      const r = await fetch(`/api/person/info?personId=${n.pdPersonId}&companyId=${companyId}`).then(x=>x.json());
+      if (r.person && r.person.name && r.person.name !== n.name) {
+        nodes[n.id].name = r.person.name;
+        changed = true;
+      }
+    } catch(e) {}
+  }));
+  if (changed) { renderAll(); markDirty(); }
+}
+
 window.fitView = function() {
   const ns = Object.values(nodes);
   if (!ns.length) return;
@@ -2171,7 +2329,12 @@ window.closeModal = id => document.getElementById(id).style.display = "none";
 window.overlayClose = (e,id) => { if (e.target.classList.contains("overlay")) closeModal(id); };
 
 /* ── Keyboard ────────────────────────────────────────────────── */
+let spaceDown = false;
 document.addEventListener("keydown", e=>{
+  if ((e.key === " " || e.key === "Spacebar") && !e.target.matches("input,textarea")) {
+    if (!spaceDown) { spaceDown = true; canvasEl.style.cursor = "grab"; }
+    e.preventDefault();
+  }
   if (e.key === "Escape") {
     dragLine.style.display = "none";
     banner.style.display = "none";
@@ -2186,6 +2349,9 @@ document.addEventListener("keydown", e=>{
       selectedNodes.clear();
     }
   }
+});
+document.addEventListener("keyup", e=>{
+  if (e.key === " " || e.key === "Spacebar") { spaceDown = false; canvasEl.style.cursor = ""; }
 });
 
 /* ── Status ──────────────────────────────────────────────────── */
