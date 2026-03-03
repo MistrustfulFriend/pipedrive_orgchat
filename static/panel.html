@@ -472,8 +472,8 @@
       pointer-events: stroke;
     }
     /* JS adds .edge-hover class on mouseenter, removes on mouseleave */
-    .edge-group.edge-hover .edge-path,
-    .edge-group.edge-selected .edge-path { stroke: var(--blue); }
+    /* Stroke color is controlled entirely by JS (applyEdgeStyle) to respect custom colors */
+    .edge-group.edge-hover .edge-path { opacity: 0.75; }
     .edge-group.edge-selected .edge-path { stroke-width: 2.5; }
 
     /* ✕ delete button — hidden by default via opacity, not display:none */
@@ -549,7 +549,7 @@
       position: absolute; inset: 0;
       pointer-events: none;
       transform-origin: 0 0;
-      z-index: 3;
+      z-index: 1;
     }
     .frame {
       position: absolute;
@@ -1412,6 +1412,7 @@ if (!companyId) {
   const s = await fetch(`/api/status?companyId=${companyId}`)
     .then(r => r.json()).catch(() => ({ connected: false }));
   if (!s.connected) document.getElementById("connect-screen").classList.add("show");
+  else if (companyId) loadOrgList();
 }
 
 /* ── State ───────────────────────────────────────────────────── */
@@ -1722,7 +1723,7 @@ const EDGE_COLORS = {
 const EDGE_COLOR_SELECTED = { stroke:"#1c64f2", marker:"blue" };
 
 function edgeColor(color, selected) {
-  if (selected) return EDGE_COLOR_SELECTED;
+  // Always return the edge's own color; selection is shown via stroke-width/filter, not color override
   return EDGE_COLORS[color] || EDGE_COLORS.default;
 }
 
@@ -1820,6 +1821,7 @@ function applyEdgeStyle(pathEl, e, selected) {
   pathEl.setAttribute("stroke-dasharray", da === "none" ? "" : da);
   const col = edgeColor(e.color, selected);
   pathEl.setAttribute("stroke", col.stroke);
+  pathEl.setAttribute("stroke-width", selected ? "2.5" : "2");
   pathEl.setAttribute("marker-end",   e.arrow!=="none" ? `url(#arr-${col.marker})` : "");
   pathEl.setAttribute("marker-start", e.arrow==="both"  ? `url(#arr-start-${col.marker})` : "");
 }
