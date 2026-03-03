@@ -485,14 +485,39 @@
     .edge-del-btn:hover .edge-del-circle { fill: var(--red); }
     .edge-del-btn:hover .edge-del-x { stroke: white; }
 
-    /* ⇄ reroute handle */
-    .edge-reroute-btn { cursor: crosshair; opacity: 0; transition: opacity .12s; pointer-events: none; }
-    .edge-reroute-circle { fill: white; stroke: var(--blue); stroke-width: 1.5; transition: fill .12s; }
-    .edge-reroute-arrow { stroke: var(--blue); stroke-width: 2; stroke-linecap: round; fill: none; }
-    .edge-group.edge-hover .edge-reroute-btn,
-    .edge-group.edge-selected .edge-reroute-btn { opacity: 1; pointer-events: all; }
-    .edge-reroute-btn:hover .edge-reroute-circle { fill: var(--blue); }
-    .edge-reroute-btn:hover .edge-reroute-arrow { stroke: white; }
+    /* ─── Edge style toolbar (appears when edge selected) ── */
+    #edge-toolbar {
+      position: fixed;
+      background: var(--bg2);
+      border: 1px solid var(--border);
+      border-radius: 10px;
+      padding: 5px 6px;
+      display: none;
+      gap: 3px;
+      align-items: center;
+      box-shadow: 0 4px 20px rgba(0,0,0,.14);
+      z-index: 200;
+      pointer-events: all;
+    }
+    #edge-toolbar.show { display: flex; }
+    .et-sep { width: 1px; height: 18px; background: var(--border); margin: 0 3px; }
+    .et-btn {
+      display: flex; align-items: center; justify-content: center; gap: 4px;
+      height: 28px; padding: 0 8px;
+      border: 1px solid transparent;
+      border-radius: 6px;
+      background: none;
+      font-family: var(--font); font-size: 11px; font-weight: 500;
+      color: var(--text2);
+      cursor: pointer;
+      transition: all .12s;
+      white-space: nowrap;
+    }
+    .et-btn:hover { background: var(--bg3); border-color: var(--border); color: var(--text); }
+    .et-btn.active { background: var(--blueDim); border-color: rgba(28,100,242,0.3); color: var(--blue); }
+    .et-btn svg { width: 14px; height: 10px; flex-shrink: 0; }
+    .et-del { color: var(--red); }
+    .et-del:hover { background: #fef2f2; border-color: rgba(224,36,36,.25); color: var(--red); }
 
     #drag-line {
       fill: none;
@@ -1030,15 +1055,17 @@
 
     <svg id="svg-layer" xmlns="http://www.w3.org/2000/svg">
       <defs>
-        <!-- strokeWidth units (default): rendered size = markerWidth * stroke-width.
-             stroke-width=2, markerWidth=6 → 12 logical units wide.
-             Tip of polygon is at x=6 (markerWidth). refX=6 puts tip at path endpoint.
-             No path shortening needed — tip lands exactly on node border. -->
-        <marker id="arr" markerWidth="6" markerHeight="5" refX="6" refY="2.5" orient="auto">
-          <polygon points="0 0, 6 2.5, 0 5" fill="#b0bac8"/>
+        <marker id="arr" markerWidth="7" markerHeight="6" refX="6" refY="3" orient="auto">
+          <polygon points="0 0, 7 3, 0 6" fill="#b0bac8"/>
         </marker>
-        <marker id="arr-blue" markerWidth="6" markerHeight="5" refX="6" refY="2.5" orient="auto">
-          <polygon points="0 0, 6 2.5, 0 5" fill="#1864d4"/>
+        <marker id="arr-blue" markerWidth="7" markerHeight="6" refX="6" refY="3" orient="auto">
+          <polygon points="0 0, 7 3, 0 6" fill="#1c64f2"/>
+        </marker>
+        <marker id="arr-start" markerWidth="7" markerHeight="6" refX="1" refY="3" orient="auto-start-reverse">
+          <polygon points="0 0, 7 3, 0 6" fill="#b0bac8"/>
+        </marker>
+        <marker id="arr-start-blue" markerWidth="7" markerHeight="6" refX="1" refY="3" orient="auto-start-reverse">
+          <polygon points="0 0, 7 3, 0 6" fill="#1c64f2"/>
         </marker>
       </defs>
       <!-- Single transform group — pan+zoom applied here once for both edges and drag line -->
@@ -1070,6 +1097,47 @@
         <button class="dp-close" onclick="closePopover()"><svg viewBox="0 0 24 24"><line x1="18" y1="6" x2="6" y2="18"/><line x1="6" y1="6" x2="18" y2="18"/></svg></button>
       </div>
       <div class="dp-list" id="dp-list"></div>
+    </div>
+
+    <!-- Edge style toolbar -->
+    <div id="edge-toolbar">
+      <!-- Shape group -->
+      <button class="et-btn active" id="et-curved" onclick="setEdgeShape('curved')" title="Curved">
+        <svg viewBox="0 0 28 10" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round"><path d="M2,8 C8,8 20,2 26,2"/></svg>
+        Curved
+      </button>
+      <button class="et-btn" id="et-straight" onclick="setEdgeShape('straight')" title="Straight">
+        <svg viewBox="0 0 28 10" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round"><line x1="2" y1="5" x2="26" y2="5"/></svg>
+        Straight
+      </button>
+      <button class="et-btn" id="et-elbow" onclick="setEdgeShape('elbow')" title="Elbow / orthogonal">
+        <svg viewBox="0 0 28 10" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round"><polyline points="2,8 14,8 14,2 26,2"/></svg>
+        Elbow
+      </button>
+      <div class="et-sep"></div>
+      <!-- Dash group -->
+      <button class="et-btn active" id="et-solid" onclick="setEdgeDash('solid')" title="Solid">
+        <svg viewBox="0 0 28 4" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round"><line x1="2" y1="2" x2="26" y2="2"/></svg>
+        Solid
+      </button>
+      <button class="et-btn" id="et-dashed" onclick="setEdgeDash('dashed')" title="Dashed">
+        <svg viewBox="0 0 28 4" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-dasharray="5 3"><line x1="2" y1="2" x2="26" y2="2"/></svg>
+        Dashed
+      </button>
+      <button class="et-btn" id="et-dotted" onclick="setEdgeDash('dotted')" title="Dotted">
+        <svg viewBox="0 0 28 4" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-dasharray="1 4"><line x1="2" y1="2" x2="26" y2="2"/></svg>
+        Dotted
+      </button>
+      <div class="et-sep"></div>
+      <!-- Arrow group -->
+      <button class="et-btn active" id="et-arrow-end" onclick="setEdgeArrow('end')" title="Arrow at end">→ End</button>
+      <button class="et-btn" id="et-arrow-both" onclick="setEdgeArrow('both')" title="Arrow both ends">↔ Both</button>
+      <button class="et-btn" id="et-arrow-none" onclick="setEdgeArrow('none')" title="No arrow">— None</button>
+      <div class="et-sep"></div>
+      <button class="et-btn et-del" onclick="deleteEdge(selectedEdgeId)">
+        <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round" style="width:12px;height:12px"><polyline points="3 6 5 6 21 6"/><path d="M19 6l-1 14H6L5 6"/></svg>
+        Delete
+      </button>
     </div>
 
     <!-- Not-connected screen -->
@@ -1224,7 +1292,7 @@ if (!companyId) {
 
 /* ── State ───────────────────────────────────────────────────── */
 let nodes   = {};  // id → {id, name, title, dept, pdPersonId, placeholder, x, y}
-let edges   = [];  // [{id, from, to}]
+let edges   = [];  // [{id, from, to, shape, dash, arrow}]  shape=curved|straight|elbow  dash=solid|dashed|dotted  arrow=end|both|none
 let nidC    = 0;
 let eidC    = 0;
 let connSrc       = null;
@@ -1405,61 +1473,124 @@ function makeNodeEl(n) {
 function nodeW(n) { return document.getElementById("nd-"+n.id)?.offsetWidth  || 200; }
 function nodeH(n) { return document.getElementById("nd-"+n.id)?.offsetHeight || 100; }
 
-/* ── Edge elements ───────────────────────────────────────────── */
-function edgePath(f, t) {
-  // The arrowhead marker has markerWidth=6, stroke-width=2 → visual size ≈ 12px.
-  // We shorten the path endpoint by ~10px so the arrowhead tip lands ON the node
-  // border without overlapping the card itself.
-  const ARROW = 10;
-  const fw = nodeW(f), fh = nodeH(f), tw = nodeW(t), th = nodeH(t);
-  const fcx = f.x + fw/2, fcy = f.y + fh/2;
-  const tcx = t.x + tw/2, tcy = t.y + th/2;
-  const dx = tcx - fcx, dy = tcy - fcy;
-  let x1, y1, x2, y2, cpx1, cpy1, cpx2, cpy2;
-  if (Math.abs(dx) > Math.abs(dy)) {
-    if (dx > 0) { x1 = f.x+fw; y1 = fcy; x2 = t.x - ARROW;   y2 = tcy; }
-    else        { x1 = f.x;    y1 = fcy; x2 = t.x+tw + ARROW; y2 = tcy; }
-    const g = Math.abs(x2-x1)*0.5;
-    cpx1 = x1+(dx>0?g:-g); cpy1 = y1;
-    cpx2 = x2-(dx>0?g:-g); cpy2 = y2;
-  } else {
-    if (dy > 0) { x1 = fcx; y1 = f.y+fh; x2 = tcx; y2 = t.y - ARROW;    }
-    else        { x1 = fcx; y1 = f.y;     x2 = tcx; y2 = t.y+th + ARROW; }
-    const g = Math.abs(y2-y1)*0.5;
-    cpx1 = x1; cpy1 = y1+(dy>0?g:-g);
-    cpx2 = x2; cpy2 = y2-(dy>0?g:-g);
+/* ── Edge geometry ────────────────────────────────────────────── */
+// Returns the best exit port {side, x, y} from node f toward node t
+function bestPort(f, t, fw, fh, tw, th) {
+  const fcx = f.x+fw/2, fcy = f.y+fh/2;
+  const tcx = t.x+tw/2, tcy = t.y+th/2;
+  const dx = tcx-fcx, dy = tcy-fcy;
+  // Pick the side whose outward direction most aligns with the vector to target
+  const scores = {
+    right:  dx,
+    left:  -dx,
+    bottom: dy,
+    top:   -dy,
+  };
+  const side = Object.entries(scores).sort((a,b)=>b[1]-a[1])[0][0];
+  const cx = f.x+fw/2, cy = f.y+fh/2;
+  if (side==="right")  return {side, x:f.x+fw, y:cy};
+  if (side==="left")   return {side, x:f.x,    y:cy};
+  if (side==="bottom") return {side, x:cx,     y:f.y+fh};
+  /* top */             return {side, x:cx,     y:f.y};
+}
+
+// Returns the best entry port {side, x, y} on node t coming FROM direction of f
+function bestEntryPort(f, t, fw, fh, tw, th) {
+  const fcx = f.x+fw/2, fcy = f.y+fh/2;
+  const tcx = t.x+tw/2, tcy = t.y+th/2;
+  const dx = tcx-fcx, dy = tcy-fcy;
+  // The entry side faces TOWARD the source — opposite scoring
+  const scores = {
+    left:   dx,
+    right: -dx,
+    top:    dy,
+    bottom:-dy,
+  };
+  const side = Object.entries(scores).sort((a,b)=>b[1]-a[1])[0][0];
+  const cx = t.x+tw/2, cy = t.y+th/2;
+  const ARROW = 12; // gap so arrowhead clears the border cleanly
+  if (side==="left")   return {side, x:t.x     - ARROW, y:cy};
+  if (side==="right")  return {side, x:t.x+tw  + ARROW, y:cy};
+  if (side==="top")    return {side, x:cx,              y:t.y    - ARROW};
+  /* bottom */          return {side, x:cx,              y:t.y+th + ARROW};
+}
+
+function edgePathForStyle(f, t, shape) {
+  shape = shape || "curved";
+  const fw=nodeW(f), fh=nodeH(f), tw=nodeW(t), th=nodeH(t);
+  const src  = bestPort(f, t, fw, fh, tw, th);
+  const dst  = bestEntryPort(f, t, fw, fh, tw, th);
+  const x1=src.x, y1=src.y, x2=dst.x, y2=dst.y;
+
+  if (shape === "straight") {
+    return `M${x1},${y1} L${x2},${y2}`;
   }
+
+  if (shape === "elbow") {
+    // Orthogonal / elbow routing
+    const srcSide = src.side, dstSide = dst.side;
+    let pts;
+    if ((srcSide==="bottom"||srcSide==="top") && (dstSide==="bottom"||dstSide==="top")) {
+      const my = (y1+y2)/2;
+      pts = `M${x1},${y1} L${x1},${my} L${x2},${my} L${x2},${y2}`;
+    } else if ((srcSide==="left"||srcSide==="right") && (dstSide==="left"||dstSide==="right")) {
+      const mx = (x1+x2)/2;
+      pts = `M${x1},${y1} L${mx},${y1} L${mx},${y2} L${x2},${y2}`;
+    } else if ((srcSide==="bottom"||srcSide==="top")) {
+      pts = `M${x1},${y1} L${x1},${y2} L${x2},${y2}`;
+    } else {
+      pts = `M${x1},${y1} L${x2},${y1} L${x2},${y2}`;
+    }
+    return pts;
+  }
+
+  // curved (default) — smooth cubic bezier
+  const dx = x2-x1, dy = y2-y1;
+  let cpx1, cpy1, cpx2, cpy2;
+  const dist = Math.max(Math.abs(dx), Math.abs(dy));
+  const pull = Math.min(dist*0.5, 120);
+
+  const outDirs = {right:[1,0], left:[-1,0], bottom:[0,1], top:[0,-1]};
+  const inDirs  = {left:[1,0], right:[-1,0], top:[0,1], bottom:[0,-1]};
+  const [odx,ody] = outDirs[src.side];
+  const [idx,idy] = inDirs[dst.side];
+  cpx1 = x1 + odx*pull; cpy1 = y1 + ody*pull;
+  cpx2 = x2 + idx*pull; cpy2 = y2 + idy*pull;
   return `M${x1},${y1} C${cpx1},${cpy1} ${cpx2},${cpy2} ${x2},${y2}`;
 }
 
-function edgeMidpoint(f, t) {
-  // Use full-length path (noArrow) for midpoint — button sits at visual center
-  const d = edgePath(f, t);
-  const m = d.match(/M([\d.]+),([\d.]+) C([\d.]+),([\d.]+) ([\d.]+),([\d.]+) ([\d.]+),([\d.]+)/);
-  if (!m) return [f.x, f.y];
-  const [,x1,y1,c1x,c1y,c2x,c2y,x2,y2] = m.map(Number);
-  // Cubic bezier at t=0.5
-  const mx = 0.125*x1 + 0.375*c1x + 0.375*c2x + 0.125*x2;
-  const my = 0.125*y1 + 0.375*c1y + 0.375*c2y + 0.125*y2;
-  return [mx, my];
+// Wrapper used externally
+function edgePath(f, t, shape) { return edgePathForStyle(f, t, shape); }
+
+function edgeMidpoint(pathD) {
+  // Parse cubic bezier M…C… or line M…L… and return t=0.5
+  const cb = pathD.match(/M([\d.-]+),([\d.-]+) C([\d.-]+),([\d.-]+) ([\d.-]+),([\d.-]+) ([\d.-]+),([\d.-]+)/);
+  if (cb) {
+    const [,x1,y1,c1x,c1y,c2x,c2y,x2,y2] = cb.map(Number);
+    return [0.125*x1+0.375*c1x+0.375*c2x+0.125*x2, 0.125*y1+0.375*c1y+0.375*c2y+0.125*y2];
+  }
+  // polyline fallback: find midpoint of total length
+  const pts = [...pathD.matchAll(/[ML]([\d.-]+),([\d.-]+)/g)].map(m=>[+m[1],+m[2]]);
+  if (pts.length >= 2) {
+    const mid = Math.floor(pts.length/2);
+    return [(pts[mid-1][0]+pts[mid][0])/2, (pts[mid-1][1]+pts[mid][1])/2];
+  }
+  return [0,0];
 }
 
-// Position for the reroute handle — near the arrowhead, offset inward
-function edgeTailPos(f, t) {
-  const fw = nodeW(f), fh = nodeH(f), tw = nodeW(t), th = nodeH(t);
-  const fcx = f.x+fw/2, fcy = f.y+fh/2, tcx = t.x+tw/2, tcy = t.y+th/2;
-  const dx = tcx-fcx, dy = tcy-fcy;
-  let ex, ey;
-  if (Math.abs(dx) > Math.abs(dy)) {
-    ex = dx > 0 ? t.x : t.x+tw;
-    ey = tcy;
-    ex += dx > 0 ? -20 : 20;
-  } else {
-    ex = tcx;
-    ey = dy > 0 ? t.y : t.y+th;
-    ey += dy > 0 ? -20 : 20;
-  }
-  return [ex, ey];
+function dashArray(dash) {
+  if (dash==="dashed") return "8 5";
+  if (dash==="dotted") return "2 5";
+  return "none";
+}
+
+function markerEnd(arrow, selected) {
+  if (arrow==="none") return "";
+  return selected ? "url(#arr-blue)" : "url(#arr)";
+}
+function markerStart(arrow, selected) {
+  if (arrow!=="both") return "";
+  return selected ? "url(#arr-start-blue)" : "url(#arr-start)";
 }
 
 function svgEl(tag) { return document.createElementNS("http://www.w3.org/2000/svg", tag); }
@@ -1468,26 +1599,32 @@ function makeEdgeEl(e) {
   const f = nodes[e.from], t = nodes[e.to];
   if (!f || !t) return;
 
+  // Ensure style fields exist (backwards compat with saved charts)
+  e.shape = e.shape || "curved";
+  e.dash  = e.dash  || "solid";
+  e.arrow = e.arrow || "end";
+
   const g = svgEl("g");
   g.id = "ed-"+e.id;
   g.className.baseVal = "edge-group";
 
-  // Wide invisible hit area — stroke must be non-zero opacity for hit testing
+  const d = edgePathForStyle(f, t, e.shape);
+
+  // Wide invisible hit area
   const hit = svgEl("path");
   hit.setAttribute("class","edge-hit");
-  hit.setAttribute("d", edgePath(f,t));
+  hit.setAttribute("d", d);
   hit.setAttribute("pointer-events","stroke");
 
   // Visible line
   const path = svgEl("path");
   path.setAttribute("class","edge-path");
-  path.setAttribute("marker-end","url(#arr)");
-  path.setAttribute("d", edgePath(f,t));
+  path.setAttribute("d", d);
+  applyEdgeStyle(path, e, false);
 
-  // JS hover — more reliable than CSS :hover on SVG across browsers
+  // JS hover
   hit.addEventListener("mouseenter", () => g.classList.add("edge-hover"));
   hit.addEventListener("mouseleave", ev => {
-    // Don't remove hover if mouse moved to a button on this edge
     if (!ev.relatedTarget || !g.contains(ev.relatedTarget)) g.classList.remove("edge-hover");
   });
   g.addEventListener("mouseleave", ev => {
@@ -1495,40 +1632,32 @@ function makeEdgeEl(e) {
   });
   hit.addEventListener("click", ev => { ev.stopPropagation(); selectEdge(e.id); });
 
-  // ── Delete ✕ at midpoint
-  const [mx,my] = edgeMidpoint(f,t);
+  // ── Delete ✕ at midpoint (kept small, only visible on hover/select via CSS)
+  const [mx,my] = edgeMidpoint(d);
   const delG = svgEl("g");
   delG.setAttribute("class","edge-del-btn");
   delG.setAttribute("transform",`translate(${mx},${my})`);
-  const dc = svgEl("circle"); dc.setAttribute("class","edge-del-circle"); dc.setAttribute("r","10");
+  const dc = svgEl("circle"); dc.setAttribute("class","edge-del-circle"); dc.setAttribute("r","9");
   const dl1 = svgEl("line"); dl1.setAttribute("class","edge-del-x");
-  dl1.setAttribute("x1","-4"); dl1.setAttribute("y1","-4"); dl1.setAttribute("x2","4"); dl1.setAttribute("y2","4");
+  dl1.setAttribute("x1","-3.5"); dl1.setAttribute("y1","-3.5"); dl1.setAttribute("x2","3.5"); dl1.setAttribute("y2","3.5");
   const dl2 = svgEl("line"); dl2.setAttribute("class","edge-del-x");
-  dl2.setAttribute("x1","4"); dl2.setAttribute("y1","-4"); dl2.setAttribute("x2","-4"); dl2.setAttribute("y2","4");
+  dl2.setAttribute("x1","3.5"); dl2.setAttribute("y1","-3.5"); dl2.setAttribute("x2","-3.5"); dl2.setAttribute("y2","3.5");
   delG.appendChild(dc); delG.appendChild(dl1); delG.appendChild(dl2);
   delG.addEventListener("click", ev => { ev.stopPropagation(); deleteEdge(e.id); });
-  // Keep hover state when mouse is over the button
   delG.addEventListener("mouseenter", () => g.classList.add("edge-hover"));
   delG.addEventListener("mouseleave", ev => {
     if (!ev.relatedTarget || !g.contains(ev.relatedTarget)) g.classList.remove("edge-hover");
   });
 
-  // ── Reroute ⇄ near arrowhead  
-  const [rx,ry] = edgeTailPos(f,t);
-  const rrG = svgEl("g");
-  rrG.setAttribute("class","edge-reroute-btn");
-  rrG.setAttribute("transform",`translate(${rx},${ry})`);
-  const rrc = svgEl("circle"); rrc.setAttribute("class","edge-reroute-circle"); rrc.setAttribute("r","10");
-  const rra = svgEl("polyline"); rra.setAttribute("class","edge-reroute-arrow"); rra.setAttribute("points","-4,-3 0,3 4,-3");
-  rrG.appendChild(rrc); rrG.appendChild(rra);
-  rrG.addEventListener("mouseenter", () => g.classList.add("edge-hover"));
-  rrG.addEventListener("mouseleave", ev => {
-    if (!ev.relatedTarget || !g.contains(ev.relatedTarget)) g.classList.remove("edge-hover");
-  });
-  rrG.addEventListener("mousedown", ev => { ev.stopPropagation(); ev.preventDefault(); startEdgeReroute(e.id, ev); });
-
-  g.appendChild(hit); g.appendChild(path); g.appendChild(delG); g.appendChild(rrG);
+  g.appendChild(hit); g.appendChild(path); g.appendChild(delG);
   edgesG.appendChild(g);
+}
+
+function applyEdgeStyle(pathEl, e, selected) {
+  const da = dashArray(e.dash);
+  pathEl.setAttribute("stroke-dasharray", da === "none" ? "" : da);
+  pathEl.setAttribute("marker-end",   markerEnd(e.arrow, selected));
+  pathEl.setAttribute("marker-start", markerStart(e.arrow, selected));
 }
 
 function refreshNodeEdges(nid) {
@@ -1537,12 +1666,10 @@ function refreshNodeEdges(nid) {
     const g = document.getElementById("ed-"+e.id);
     if (!g) return;
     const f = nodes[e.from], t = nodes[e.to];
-    const d = edgePath(f,t);
+    const d = edgePathForStyle(f, t, e.shape);
     g.querySelectorAll(".edge-hit,.edge-path").forEach(p => p.setAttribute("d",d));
-    const [mx,my] = edgeMidpoint(f,t);
+    const [mx,my] = edgeMidpoint(d);
     g.querySelector(".edge-del-btn")?.setAttribute("transform",`translate(${mx},${my})`);
-    const [rx,ry] = edgeTailPos(f,t);
-    g.querySelector(".edge-reroute-btn")?.setAttribute("transform",`translate(${rx},${ry})`);
   });
 }
 
@@ -1550,16 +1677,115 @@ function refreshNodeEdges(nid) {
 function selectEdge(eid) {
   clearEdgeSelection();
   selectedEdgeId = eid;
-  document.getElementById("ed-"+eid)?.classList.add("edge-selected");
+  const g = document.getElementById("ed-"+eid);
+  if (!g) return;
+  g.classList.add("edge-selected");
+  // Switch to blue markers
+  const e = edges.find(x=>x.id===eid);
+  if (e) {
+    const path = g.querySelector(".edge-path");
+    if (path) applyEdgeStyle(path, e, true);
+  }
+  showEdgeToolbar(eid);
 }
+
 function clearEdgeSelection() {
   if (selectedEdgeId != null) {
-    document.getElementById("ed-"+selectedEdgeId)?.classList.remove("edge-selected");
+    const g = document.getElementById("ed-"+selectedEdgeId);
+    if (g) {
+      g.classList.remove("edge-selected");
+      const e = edges.find(x=>x.id===selectedEdgeId);
+      const path = g.querySelector(".edge-path");
+      if (e && path) applyEdgeStyle(path, e, false);
+    }
     selectedEdgeId = null;
   }
+  hideEdgeToolbar();
 }
+
+function showEdgeToolbar(eid) {
+  const e = edges.find(x=>x.id===eid);
+  if (!e) return;
+  const tb = document.getElementById("edge-toolbar");
+  tb.classList.add("show");
+
+  // Sync button active states
+  ["curved","straight","elbow"].forEach(s => {
+    document.getElementById("et-"+s)?.classList.toggle("active", e.shape===s);
+  });
+  ["solid","dashed","dotted"].forEach(s => {
+    document.getElementById("et-"+s)?.classList.toggle("active", e.dash===s);
+  });
+  ["end","both","none"].forEach(s => {
+    document.getElementById("et-arrow-"+s)?.classList.toggle("active", e.arrow===s);
+  });
+
+  // Position toolbar near the midpoint of the edge, in screen space
+  const g = document.getElementById("ed-"+eid);
+  const pathEl = g?.querySelector(".edge-path");
+  const d = pathEl?.getAttribute("d") || "";
+  const [mx,my] = edgeMidpoint(d);
+  // Convert canvas coords → screen coords
+  const rect = canvasEl.getBoundingClientRect();
+  const sx = mx*zoom+panX+rect.left;
+  const sy = my*zoom+panY+rect.top;
+  const tbW = 600, tbH = 40;
+  let left = sx - tbW/2;
+  let top  = sy - tbH - 16;
+  if (left < 8) left = 8;
+  if (left + tbW > window.innerWidth-8) left = window.innerWidth-tbW-8;
+  if (top < 8) top = sy+16;
+  tb.style.left = left+"px";
+  tb.style.top  = top+"px";
+}
+
+function hideEdgeToolbar() {
+  document.getElementById("edge-toolbar")?.classList.remove("show");
+}
+
+/* ── Edge style controls ─────────────────────────────────────── */
+window.setEdgeShape = function(shape) {
+  if (selectedEdgeId == null) return;
+  const e = edges.find(x=>x.id===selectedEdgeId);
+  if (!e) return;
+  e.shape = shape;
+  const g = document.getElementById("ed-"+e.id);
+  const f = nodes[e.from], t = nodes[e.to];
+  const d = edgePathForStyle(f, t, shape);
+  g?.querySelectorAll(".edge-hit,.edge-path").forEach(p=>p.setAttribute("d",d));
+  const [mx,my] = edgeMidpoint(d);
+  g?.querySelector(".edge-del-btn")?.setAttribute("transform",`translate(${mx},${my})`);
+  // Update toolbar active states
+  ["curved","straight","elbow"].forEach(s=>document.getElementById("et-"+s)?.classList.toggle("active",s===shape));
+  markDirty();
+  showEdgeToolbar(selectedEdgeId);
+};
+
+window.setEdgeDash = function(dash) {
+  if (selectedEdgeId == null) return;
+  const e = edges.find(x=>x.id===selectedEdgeId);
+  if (!e) return;
+  e.dash = dash;
+  const g = document.getElementById("ed-"+e.id);
+  const path = g?.querySelector(".edge-path");
+  if (path) applyEdgeStyle(path, e, true);
+  ["solid","dashed","dotted"].forEach(s=>document.getElementById("et-"+s)?.classList.toggle("active",s===dash));
+  markDirty();
+};
+
+window.setEdgeArrow = function(arrow) {
+  if (selectedEdgeId == null) return;
+  const e = edges.find(x=>x.id===selectedEdgeId);
+  if (!e) return;
+  e.arrow = arrow;
+  const g = document.getElementById("ed-"+e.id);
+  const path = g?.querySelector(".edge-path");
+  if (path) applyEdgeStyle(path, e, true);
+  ["end","both","none"].forEach(s=>document.getElementById("et-arrow-"+s)?.classList.toggle("active",s===arrow));
+  markDirty();
+};
 canvasEl.addEventListener("click", e => {
-  if (!e.target.closest(".edge-group")) clearEdgeSelection();
+  if (!e.target.closest(".edge-group") && !e.target.closest("#edge-toolbar")) clearEdgeSelection();
 });
 
 /* ── Edge reroute ────────────────────────────────────────────── */
@@ -1669,7 +1895,7 @@ function startEdgeDrag(fromId, ev) {
 function addEdge(fromId, toId) {
   if (edges.find(e=>e.from===fromId&&e.to===toId)) return false;
   if (fromId === toId) return false;
-  const e = {id: ++eidC, from: fromId, to: toId};
+  const e = {id: ++eidC, from: fromId, to: toId, shape:"curved", dash:"solid", arrow:"end"};
   edges.push(e);
   makeEdgeEl(e);
   markDirty();
@@ -1680,6 +1906,7 @@ function deleteEdge(eid) {
   edges = edges.filter(e => e.id !== eid);
   document.getElementById("ed-"+eid)?.remove();
   clearEdgeSelection();
+  hideEdgeToolbar();
   markDirty();
   setStatus("Connection removed");
 }
@@ -2199,6 +2426,12 @@ document.addEventListener("click", e => {
   if (popoverOpen && !e.target.closest("#deal-popover") && !e.target.closest(".node-deals")) {
     closePopover();
   }
+  // Close edge toolbar if click is outside it and not on an edge
+  if (selectedEdgeId != null &&
+      !e.target.closest("#edge-toolbar") &&
+      !e.target.closest(".edge-group")) {
+    clearEdgeSelection();
+  }
 });
 
 /* ── Sidebar deals panel ─────────────────────────────────────── */
@@ -2268,13 +2501,17 @@ async function loadOrgList() {
 function renderOrgList(orgs) {
   const el = document.getElementById("sb-org-list");
   if (!orgs.length) { el.innerHTML = '<div class="sb-deals-empty">No results</div>'; return; }
-  el.innerHTML = orgs.map(o => {
+  el.innerHTML = "";
+  orgs.forEach(o => {
     const active = String(o.id) === String(orgId);
-    return `<div class="sb-org-item${active?' active':''}" onclick="selectOrgFromList(${o.id}, ${JSON.stringify(o.name).replace(/"/g,'&quot;')})">
-      <svg viewBox="0 0 24 24"><path d="M3 9l9-7 9 7v11a2 2 0 01-2 2H5a2 2 0 01-2-2z"/></svg>
-      ${escHtml(o.name)}
-    </div>`;
-  }).join("");
+    const item = document.createElement("div");
+    item.className = "sb-org-item" + (active ? " active" : "");
+    item.dataset.orgId   = o.id;
+    item.dataset.orgName = o.name;
+    item.innerHTML = `<svg viewBox="0 0 24 24"><path d="M3 9l9-7 9 7v11a2 2 0 01-2 2H5a2 2 0 01-2-2z"/></svg>${escHtml(o.name)}`;
+    item.addEventListener("click", () => selectOrgFromList(o.id, o.name));
+    el.appendChild(item);
+  });
 }
 
 function filterOrgList(q) {
@@ -2373,6 +2610,7 @@ document.addEventListener("keydown", e=>{
     connSrc = null;
     selectedNodes.clear(); syncSelection();
     clearEdgeSelection();
+    hideEdgeToolbar();
   }
   if ((e.key === "Delete" || e.key === "Backspace") && !e.target.matches("input,textarea")) {
     if (selectedEdgeId != null) { deleteEdge(selectedEdgeId); return; }
