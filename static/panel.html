@@ -1405,12 +1405,14 @@ try {
 }
 
 /* ── Auth check ──────────────────────────────────────────────── */
+let isConnected = false;
 if (!companyId) {
   document.getElementById("connect-screen").classList.add("show");
 } else {
   const s = await fetch(`/api/status?companyId=${companyId}`)
     .then(r => r.json()).catch(() => ({ connected: false }));
-  if (!s.connected) document.getElementById("connect-screen").classList.add("show");
+  isConnected = !!s.connected;
+  if (!isConnected) document.getElementById("connect-screen").classList.add("show");
 }
 
 /* ── State ───────────────────────────────────────────────────── */
@@ -1573,8 +1575,8 @@ async function tryAutoLoad() {
   }
 }
 await tryAutoLoad();
-// Load org list now — companyId is fully resolved after SDK init + tryAutoLoad
-if (companyId) _loadOrgList();
+// Load org list — only if we confirmed connection with Pipedrive
+if (companyId && isConnected) _loadOrgList();
 
 /* ── Render ──────────────────────────────────────────────────── */
 function renderAll() {
@@ -2505,15 +2507,19 @@ function _onPersonSearch(v) {
 
 async function doPsSearch(q) {
   const el = document.getElementById("ps-results");
+  if (!companyId) { el.innerHTML=`<div class="sr-msg">Not connected to Pipedrive</div>`; return; }
   try {
-    const d = await fetch(`/api/orgchart/search?q=${encodeURIComponent(q)}&companyId=${companyId}`).then(r=>r.json());
-    if (!(d.people||[]).length) { el.innerHTML=`<div class="sr-msg">No results for "${q}"</div>`; return; }
+    const resp = await fetch(`/api/orgchart/search?q=${encodeURIComponent(q)}&companyId=${encodeURIComponent(companyId)}`);
+    if (!resp.ok) { el.innerHTML=`<div class="sr-msg">Error ${resp.status}</div>`; return; }
+    const d = await resp.json();
+    if (d.error) { el.innerHTML=`<div class="sr-msg">${escHtml(d.error)}</div>`; return; }
+    if (!(d.people||[]).length) { el.innerHTML=`<div class="sr-msg">No results for "${escHtml(q)}"</div>`; return; }
     el.innerHTML = d.people.map(p=>`
       <div class="sr-item" onclick='selectPerson(${JSON.stringify(p).replace(/'/g,"&#39;")})'>
         <div class="sr-av">${initials(p.name)}</div>
-        <div><div class="sr-name">${p.name}</div><div class="sr-sub">${p.title||p.org_name||""}</div></div>
+        <div><div class="sr-name">${escHtml(p.name)}</div><div class="sr-sub">${escHtml(p.title||p.org_name||"")}</div></div>
       </div>`).join("");
-  } catch(e) { el.innerHTML=`<div class="sr-msg">Search unavailable</div>`; }
+  } catch(e) { console.error("doPsSearch:",e); el.innerHTML=`<div class="sr-msg">Search unavailable</div>`; }
 }
 
 function _selectPerson(p) {
@@ -2555,11 +2561,15 @@ function _onOrgSearch(v) {
 
 async function doOrgSearch(q) {
   const el = document.getElementById("org-dd-list");
+  if (!companyId) { el.innerHTML=`<div class="org-dd-empty">Not connected</div>`; return; }
   try {
-    const d = await fetch(`/api/orgs/search?q=${encodeURIComponent(q)}&companyId=${companyId}`).then(r=>r.json());
-    if (!(d.orgs||[]).length) { el.innerHTML=`<div class="org-dd-empty">No results</div>`; return; }
-    el.innerHTML = d.orgs.map(o=>`<div class="org-dd-item" onclick="selectOrg(${o.id},'${o.name.replace(/'/g,"\\'")}')">${o.name}</div>`).join("");
-  } catch(e) { el.innerHTML=`<div class="org-dd-empty">Error</div>`; }
+    const resp = await fetch(`/api/orgs/search?q=${encodeURIComponent(q)}&companyId=${encodeURIComponent(companyId)}`);
+    if (!resp.ok) { el.innerHTML=`<div class="org-dd-empty">Error ${resp.status}</div>`; return; }
+    const d = await resp.json();
+    if (d.error) { el.innerHTML=`<div class="org-dd-empty">${escHtml(d.error)}</div>`; return; }
+    if (!(d.orgs||[]).length) { el.innerHTML=`<div class="org-dd-empty">No results for "${escHtml(q)}"</div>`; return; }
+    el.innerHTML = d.orgs.map(o=>`<div class="org-dd-item" onclick="selectOrg(${o.id},'${o.name.replace(/'/g,"\\'")}')">${escHtml(o.name)}</div>`).join("");
+  } catch(e) { console.error("doOrgSearch:",e); el.innerHTML=`<div class="org-dd-empty">Search failed</div>`; }
 }
 
 async function _selectOrg(id, name) {
@@ -2851,21 +2861,37 @@ function fmtVal(v) {
 let allOrgs = [];
 
 async function _loadOrgList() {
-  if (!companyId) return;
   const el = document.getElementById("sb-org-list");
+  if (!companyId) {
+    el.innerHTML = '<div class="sb-deals-empty">Not connected</div>';
+    return;
+  }
   el.innerHTML = '<div class="sb-deals-empty">Loading…</div>';
   try {
-    // Use the dedicated list endpoint that returns orgs without needing a search term
-    const r = await fetch(`/api/orgs/list?companyId=${companyId}&limit=100`).then(x=>x.json());
+    const resp = await fetch(`/api/orgs/list?companyId=${encodeURIComponent(companyId)}&limit=100`);
+    if (!resp.ok) {
+      el.innerHTML = `<div class="sb-deals-empty">Error ${resp.status} — <span style="color:var(--blue);cursor:pointer" onclick="loadOrgList()">retry</span></div>`;
+      console.error("orgs/list HTTP error:", resp.status);
+      return;
+    }
+    const r = await resp.json();
+    if (r.error) {
+      el.innerHTML = `<div class="sb-deals-empty">${escHtml(r.error)} — <span style="color:var(--blue);cursor:pointer" onclick="loadOrgList()">retry</span></div>`;
+      return;
+    }
     allOrgs = r.orgs || [];
     if (r.more) {
-      // Fetch next page too (up to 200 total)
-      const r2 = await fetch(`/api/orgs/list?companyId=${companyId}&limit=100&start=100`).then(x=>x.json());
+      const r2 = await fetch(`/api/orgs/list?companyId=${encodeURIComponent(companyId)}&limit=100&start=100`).then(x=>x.json()).catch(()=>({orgs:[]}));
       allOrgs = allOrgs.concat(r2.orgs || []);
+    }
+    if (!allOrgs.length) {
+      el.innerHTML = '<div class="sb-deals-empty">No organisations found</div>';
+      return;
     }
     renderOrgList(allOrgs);
   } catch(e) {
-    el.innerHTML = '<div class="sb-deals-empty">Could not load</div>';
+    console.error("loadOrgList error:", e);
+    el.innerHTML = '<div class="sb-deals-empty">Failed — <span style="color:var(--blue);cursor:pointer" onclick="loadOrgList()">retry</span></div>';
   }
 }
 
@@ -2958,9 +2984,35 @@ function _fitView() {
 
 /* ── Clear ───────────────────────────────────────────────────── */
 function _clearAll() {
-  if (!confirm("Clear the entire canvas? This cannot be undone.")) return;
-  nodes = {}; edges = []; frames = []; nidC = 0; eidC = 0; fidC = 0;
-  renderAll(); markDirty();
+  // confirm() is blocked in Pipedrive iframes — use a timed auto-confirm instead
+  const btn = document.querySelector('.sb-btn[onclick="clearAll()"]');
+  if (btn && btn.dataset.confirming) {
+    // Second click — do it
+    delete btn.dataset.confirming;
+    btn.textContent = '';
+    btn.innerHTML = '<svg viewBox="0 0 24 24"><polyline points="3 6 5 6 21 6"/><path d="M19 6l-1 14H6L5 6"/></svg> Clear canvas';
+    btn.style.color = '';
+    nodes = {}; edges = []; frames = []; nidC = 0; eidC = 0; fidC = 0;
+    renderAll(); markDirty();
+  } else {
+    // First click — ask for confirmation via button state
+    if (btn) {
+      btn.dataset.confirming = '1';
+      btn.innerHTML = '<svg viewBox="0 0 24 24"><polyline points="3 6 5 6 21 6"/><path d="M19 6l-1 14H6L5 6"/></svg> Click again to confirm';
+      btn.style.color = 'var(--red)';
+      setTimeout(() => {
+        if (btn.dataset.confirming) {
+          delete btn.dataset.confirming;
+          btn.innerHTML = '<svg viewBox="0 0 24 24"><polyline points="3 6 5 6 21 6"/><path d="M19 6l-1 14H6L5 6"/></svg> Clear canvas';
+          btn.style.color = '';
+        }
+      }, 3000);
+    } else {
+      // Fallback if button not found
+      nodes = {}; edges = []; frames = []; nidC = 0; eidC = 0; fidC = 0;
+      renderAll(); markDirty();
+    }
+  }
 };
 
 /* ── Modal helpers ───────────────────────────────────────────── */
