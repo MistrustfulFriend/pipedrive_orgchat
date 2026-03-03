@@ -1445,6 +1445,45 @@ const statusTxt = document.getElementById("status-text");
 const statusDot = document.getElementById("status-dot");
 const selBox    = document.getElementById("sel-box");
 
+/* ── Eagerly expose all UI callbacks on window so onclick handlers work immediately ── */
+/* ── Real implementations are function-declared below and hoist within the IIFE   ── */
+window.fitView           = function() { _fitView(); };
+window.clearAll          = function() { _clearAll(); };
+window.saveChart         = function() { _saveChart(); };
+window.closeModal        = function(id) { _closeModal(id); };
+window.overlayClose      = function(e,id) { _overlayClose(e,id); };
+window.toggleOrgDropdown = function() { _toggleOrgDropdown(); };
+window.onOrgSearch       = function(v) { _onOrgSearch(v); };
+window.selectOrg         = function(id,name) { _selectOrg(id,name); };
+window.toggleAddDropdown = function() { _toggleAddDropdown(); };
+window.closeAddDropdown  = function() { _closeAddDropdown(); };
+window.openAddModal      = function() { _openAddModal(); };
+window.addPlaceholder    = function() { _addPlaceholder(); };
+window.confirmAdd        = function() { _confirmAdd(); };
+window.switchTab         = function(t) { _switchTab(t); };
+window.onPersonSearch    = function(v) { _onPersonSearch(v); };
+window.selectPerson      = function(p) { _selectPerson(p); };
+window.dismissConnect    = function() { _dismissConnect(); };
+window.loadOrgList       = function() { _loadOrgList(); };
+window.filterOrgList     = function(q) { _filterOrgList(q); };
+window.refreshDeals      = function() { _refreshDeals(); };
+window.openPersonInPD    = function(id,ev) { _openPersonInPD(id,ev); };
+window.openDealInPipedrive= function(id) { _openDealInPipedrive(id); };
+window.closePopover      = function() { _closePopover(); };
+window.deleteNode        = function(id) { _deleteNode(id); };
+window.openEdit          = function(id) { _openEdit(id); };
+window.confirmEdit       = function() { _confirmEdit(); };
+window.deleteEdge        = function(id) { _deleteEdge(id); };
+window.addFrame          = function() { _addFrame(); };
+window.updateFrameLabel  = function(id,v) { _updateFrameLabel(id,v); };
+window.setFrameColor     = function(id,c) { _setFrameColor(id,c); };
+window.deleteFrame       = function(id) { _deleteFrame(id); };
+window.setEdgeShape      = function(s) { _setEdgeShape(s); };
+window.setEdgeDash       = function(s) { _setEdgeDash(s); };
+window.setEdgeArrow      = function(s) { _setEdgeArrow(s); };
+window.setEdgeColor      = function(c) { _setEdgeColor(c); };
+
+
 /* ── Transform helpers ───────────────────────────────────────── */
 function applyTransform() {
   // nodes-layer: CSS transform
@@ -1502,7 +1541,7 @@ async function tryAutoLoad() {
     }
     document.getElementById("org-picker-label").textContent = orgName || `Org #${orgId}`;
     await loadChart();
-    fitView();
+    _fitView();
     return;
   }
 
@@ -1528,14 +1567,14 @@ async function tryAutoLoad() {
         orgName = match.name;
         document.getElementById("org-picker-label").textContent = orgName;
         await loadChart();
-        fitView();
+        _fitView();
       }
     } catch(e) {}
   }
 }
 await tryAutoLoad();
 // Load org list now — companyId is fully resolved after SDK init + tryAutoLoad
-if (companyId) window.loadOrgList();
+if (companyId) _loadOrgList();
 
 /* ── Render ──────────────────────────────────────────────────── */
 function renderAll() {
@@ -1917,7 +1956,7 @@ function hideEdgeToolbar() {
 }
 
 /* ── Edge style controls ─────────────────────────────────────── */
-window.setEdgeShape = function(shape) {
+function _setEdgeShape(shape) {
   if (selectedEdgeId == null) return;
   const e = edges.find(x=>x.id===selectedEdgeId);
   if (!e) return;
@@ -1933,7 +1972,7 @@ window.setEdgeShape = function(shape) {
   showEdgeToolbar(selectedEdgeId);
 };
 
-window.setEdgeDash = function(dash) {
+function _setEdgeDash(dash) {
   if (selectedEdgeId == null) return;
   const e = edges.find(x=>x.id===selectedEdgeId);
   if (!e) return;
@@ -1945,7 +1984,7 @@ window.setEdgeDash = function(dash) {
   markDirty();
 };
 
-window.setEdgeArrow = function(arrow) {
+function _setEdgeArrow(arrow) {
   if (selectedEdgeId == null) return;
   const e = edges.find(x=>x.id===selectedEdgeId);
   if (!e) return;
@@ -1957,7 +1996,7 @@ window.setEdgeArrow = function(arrow) {
   markDirty();
 };
 
-window.setEdgeColor = function(color) {
+function _setEdgeColor(color) {
   if (selectedEdgeId == null) return;
   const e = edges.find(x=>x.id===selectedEdgeId);
   if (!e) return;
@@ -2107,7 +2146,7 @@ function addEdge(fromId, toId, fromSide, toSide) {
   return true;
 }
 
-window.deleteEdge = function deleteEdge(eid) {
+function _deleteEdge(eid) {
   edges = edges.filter(e => e.id !== eid);
   document.getElementById("ed-"+eid)?.remove();
   clearEdgeSelection();
@@ -2120,7 +2159,7 @@ window.deleteEdge = function deleteEdge(eid) {
 const FRAME_COLORS = ["blue","green","purple","orange","red","teal","pink","grey"];
 let frameDragging = null;
 
-window.addFrame = function addFrame() {
+function _addFrame() {
   // Place new frame in center of current viewport
   const rect = canvasEl.getBoundingClientRect();
   const cx = (rect.width/2  - panX) / zoom;
@@ -2211,12 +2250,12 @@ function frameColorDot(c) {
   return map[c]||"#94a3b8";
 }
 
-window.updateFrameLabel = function(id, val) {
+function _updateFrameLabel(id, val) {
   const f = frames.find(x=>x.id===id);
   if (f) { f.label = val; markDirty(); }
 };
 
-window.setFrameColor = function(id, color) {
+function _setFrameColor(id, color) {
   const f = frames.find(x=>x.id===id);
   if (!f) return;
   f.color = color;
@@ -2227,7 +2266,7 @@ window.setFrameColor = function(id, color) {
   markDirty();
 };
 
-window.deleteFrame = function(id) {
+function _deleteFrame(id) {
   frames = frames.filter(f=>f.id!==id);
   document.getElementById("fr-"+id)?.remove();
   markDirty();
@@ -2362,7 +2401,7 @@ function onNodeClick(nid, e) {
 }
 
 /* ── Node CRUD ───────────────────────────────────────────────── */
-window.deleteNode = function(nid) {
+function _deleteNode(nid) {
   delete nodes[nid];
   document.getElementById("nd-"+nid)?.remove();
   edges.filter(e=>e.from===nid||e.to===nid).forEach(e=>document.getElementById("ed-"+e.id)?.remove());
@@ -2371,7 +2410,7 @@ window.deleteNode = function(nid) {
   syncEmpty(); markDirty();
 };
 
-window.openEdit = function(nid) {
+function _openEdit(nid) {
   editNodeId = nid;
   const n = nodes[nid];
   document.getElementById("e-name").value  = n.name||"";
@@ -2380,7 +2419,7 @@ window.openEdit = function(nid) {
   document.getElementById("modal-edit").style.display = "flex";
 };
 
-window.confirmEdit = function() {
+function _confirmEdit() {
   const n = nodes[editNodeId];
   const newName = document.getElementById("e-name").value.trim() || n.name;
   const nameChanged = newName !== n.name;
@@ -2389,13 +2428,13 @@ window.confirmEdit = function() {
   n.dept  = document.getElementById("e-dept").value.trim();
   document.getElementById("nd-"+n.id)?.remove();
   makeNodeEl(n); refreshNodeEdges(n.id);
-  markDirty(); closeModal("modal-edit");
+  markDirty(); _closeModal("modal-edit");
   // Push name change to Pipedrive if this is a linked person
   if (nameChanged && n.pdPersonId) syncPersonNameToPD(n.id, n.name);
 };
 
 /* ── Add modal ───────────────────────────────────────────────── */
-window.openAddModal = function() {
+function _openAddModal() {
   selectedPerson = null;
   document.getElementById("ps-input").value = "";
   document.getElementById("ps-results").style.display = "none";
@@ -2407,7 +2446,7 @@ window.openAddModal = function() {
   setTimeout(()=>document.getElementById("ps-input").focus(), 60);
 };
 
-window.addPlaceholder = function() {
+function _addPlaceholder() {
   const count = Object.values(nodes).filter(n=>n.placeholder).length+1;
   const n = {
     id: String(++nidC), name: `Open Position ${count}`,
@@ -2417,7 +2456,7 @@ window.addPlaceholder = function() {
   nodes[n.id] = n; makeNodeEl(n); syncEmpty(); markDirty();
 };
 
-window.confirmAdd = function() {
+function _confirmAdd() {
   if (activeTab === "search") {
     if (!selectedPerson) return;
     const n = {
@@ -2441,11 +2480,11 @@ window.confirmAdd = function() {
     };
     nodes[n.id] = n; makeNodeEl(n); syncEmpty(); markDirty();
   }
-  closeModal("modal-add");
+  _closeModal("modal-add");
 };
 
 /* ── Tabs ────────────────────────────────────────────────────── */
-window.switchTab = function(tab) {
+function _switchTab(tab) {
   activeTab = tab;
   document.getElementById("tp-search").style.display = tab==="search" ? "block" : "none";
   document.getElementById("tp-manual").style.display = tab==="manual" ? "block" : "none";
@@ -2455,7 +2494,7 @@ window.switchTab = function(tab) {
 
 /* ── Person search ───────────────────────────────────────────── */
 let psTimer;
-window.onPersonSearch = function(v) {
+function _onPersonSearch(v) {
   clearTimeout(psTimer);
   const el = document.getElementById("ps-results");
   if (!v.trim()) { el.style.display="none"; return; }
@@ -2477,14 +2516,14 @@ async function doPsSearch(q) {
   } catch(e) { el.innerHTML=`<div class="sr-msg">Search unavailable</div>`; }
 }
 
-window.selectPerson = function(p) {
+function _selectPerson(p) {
   selectedPerson = p;
   document.getElementById("ps-input").value = p.name;
   document.getElementById("ps-results").style.display = "none";
 };
 
 /* ── Dismiss connect screen ──────────────────────────────────── */
-window.dismissConnect = function() {
+function _dismissConnect() {
   document.getElementById("connect-screen").classList.remove("show");
   setStatus("Running without Pipedrive search");
 };
@@ -2492,7 +2531,7 @@ window.dismissConnect = function() {
 document.getElementById("connect-link").href = "/oauth/start";
 
 /* ── Org picker ──────────────────────────────────────────────── */
-window.toggleOrgDropdown = function() {
+function _toggleOrgDropdown() {
   orgPickerOpen = !orgPickerOpen;
   document.getElementById("org-dropdown").style.display = orgPickerOpen ? "block" : "none";
   if (orgPickerOpen) setTimeout(()=>document.getElementById("org-search-input").focus(), 50);
@@ -2506,7 +2545,7 @@ document.addEventListener("click", e=>{
 });
 
 let orgTimer;
-window.onOrgSearch = function(v) {
+function _onOrgSearch(v) {
   clearTimeout(orgTimer);
   const el = document.getElementById("org-dd-list");
   if (!v.trim()) { el.innerHTML=`<div class="org-dd-empty">Start typing…</div>`; return; }
@@ -2523,7 +2562,7 @@ async function doOrgSearch(q) {
   } catch(e) { el.innerHTML=`<div class="org-dd-empty">Error</div>`; }
 }
 
-window.selectOrg = async function(id, name) {
+async function _selectOrg(id, name) {
   orgId = String(id); orgName = name;
   document.getElementById("org-picker-label").textContent = name;
   document.getElementById("org-dropdown").style.display = "none";
@@ -2541,7 +2580,7 @@ function markDirty() {
 }
 
 async function autoSave() { if (dirty) await doSave(); }
-window.saveChart = async function() { await doSave(); };
+async function _saveChart() { await doSave(); }
 
 async function doSave() {
   if (!orgId) { setStatus("Select an organisation first"); return; }
@@ -2585,16 +2624,16 @@ async function loadChart() {
 /* ── Fit view ────────────────────────────────────────────────── */
 /* ── Add dropdown ────────────────────────────────────────────── */
 let addDropdownOpen = false;
-window.toggleAddDropdown = function() {
+function _toggleAddDropdown() {
   addDropdownOpen = !addDropdownOpen;
   document.getElementById("add-dropdown").style.display = addDropdownOpen ? "block" : "none";
 };
-window.closeAddDropdown = function() {
+function _closeAddDropdown() {
   addDropdownOpen = false;
   document.getElementById("add-dropdown").style.display = "none";
 };
 document.addEventListener("click", e => {
-  if (!e.target.closest("#add-btn") && !e.target.closest("#add-dropdown")) closeAddDropdown();
+  if (!e.target.closest("#add-btn") && !e.target.closest("#add-dropdown")) _closeAddDropdown();
 });
 
 /* ── Deals ───────────────────────────────────────────────────── */
@@ -2636,7 +2675,7 @@ async function fetchPersonDeals(pdPersonId) {
   }
 }
 
-window.refreshDeals = async function() {
+async function _refreshDeals() {
   // Clear cache and re-fetch
   Object.keys(dealsCache).forEach(k => delete dealsCache[k]);
   await fetchAllDeals();
@@ -2737,18 +2776,18 @@ function renderPopoverDeals(deals) {
   }).join("");
 }
 
-window.openPersonInPD = function(personId, ev) {
+function _openPersonInPD(personId, ev) {
   if (ev) { ev.stopPropagation(); ev.preventDefault(); }
   const base = pdDomain ? `https://${pdDomain}` : "https://app.pipedrive.com";
   window.open(`${base}/person/${personId}`, "_blank");
 };
 
-window.openDealInPipedrive = function(dealId) {
+function _openDealInPipedrive(dealId) {
   const base = pdDomain ? `https://${pdDomain}` : "https://app.pipedrive.com";
   window.open(`${base}/deal/${dealId}`, "_blank");
 };
 
-window.closePopover = function() {
+function _closePopover() {
   document.getElementById("deal-popover").style.display = "none";
   popoverOpen = false;
 };
@@ -2811,7 +2850,7 @@ function fmtVal(v) {
 /* ── Org list in sidebar ─────────────────────────────────────── */
 let allOrgs = [];
 
-window.loadOrgList = async function loadOrgList() {
+async function _loadOrgList() {
   if (!companyId) return;
   const el = document.getElementById("sb-org-list");
   el.innerHTML = '<div class="sb-deals-empty">Loading…</div>';
@@ -2846,7 +2885,7 @@ function renderOrgList(orgs) {
   });
 }
 
-window.filterOrgList = function filterOrgList(q) {
+function _filterOrgList(q) {
   const filtered = q ? allOrgs.filter(o => o.name.toLowerCase().includes(q.toLowerCase())) : allOrgs;
   renderOrgList(filtered);
 }
@@ -2856,7 +2895,7 @@ async function selectOrgFromList(id, name) {
   document.getElementById("org-picker-label").textContent = orgName;
   renderOrgList(allOrgs); // refresh active state
   await loadChart();
-  fitView();
+  _fitView();
 }
 
 // (loadOrgList is called after tryAutoLoad() above, where companyId is guaranteed resolved)
@@ -2900,7 +2939,7 @@ async function refreshPersonNamesFromPD() {
   if (changed) { renderAll(); markDirty(); }
 }
 
-window.fitView = function fitView() {
+function _fitView() {
   const ns = Object.values(nodes);
   if (!ns.length) return;
   const pad = 40;
@@ -2918,15 +2957,15 @@ window.fitView = function fitView() {
 };
 
 /* ── Clear ───────────────────────────────────────────────────── */
-window.clearAll = function clearAll() {
+function _clearAll() {
   if (!confirm("Clear the entire canvas? This cannot be undone.")) return;
   nodes = {}; edges = []; frames = []; nidC = 0; eidC = 0; fidC = 0;
   renderAll(); markDirty();
 };
 
 /* ── Modal helpers ───────────────────────────────────────────── */
-window.closeModal = id => document.getElementById(id).style.display = "none";
-window.overlayClose = (e,id) => { if (e.target.classList.contains("overlay")) closeModal(id); };
+function _closeModal(id) { document.getElementById(id).style.display = "none"; }
+function _overlayClose(e,id) { if (e.target.classList.contains("overlay")) _closeModal(id); }
 
 /* ── Keyboard ────────────────────────────────────────────────── */
 let spaceDown = false;
