@@ -472,7 +472,7 @@
       pointer-events: stroke;
     }
     /* JS adds .edge-hover class on mouseenter, removes on mouseleave */
-    /* Stroke color is controlled entirely by JS (applyEdgeStyle) to respect custom colors */
+    /* stroke color is managed entirely by JS (applyEdgeStyle) to respect per-edge color */
     .edge-group.edge-hover .edge-path { opacity: 0.75; }
     .edge-group.edge-selected .edge-path { stroke-width: 2.5; }
 
@@ -1412,7 +1412,6 @@ if (!companyId) {
   const s = await fetch(`/api/status?companyId=${companyId}`)
     .then(r => r.json()).catch(() => ({ connected: false }));
   if (!s.connected) document.getElementById("connect-screen").classList.add("show");
-  else if (companyId) loadOrgList();
 }
 
 /* ── State ───────────────────────────────────────────────────── */
@@ -1536,6 +1535,8 @@ async function tryAutoLoad() {
   }
 }
 await tryAutoLoad();
+// Load org list now — all window.* functions are defined at this point
+if (companyId) window.loadOrgList();
 
 /* ── Render ──────────────────────────────────────────────────── */
 function renderAll() {
@@ -1722,8 +1723,7 @@ const EDGE_COLORS = {
 };
 const EDGE_COLOR_SELECTED = { stroke:"#1c64f2", marker:"blue" };
 
-function edgeColor(color, selected) {
-  // Always return the edge's own color; selection is shown via stroke-width/filter, not color override
+function edgeColor(color) {
   return EDGE_COLORS[color] || EDGE_COLORS.default;
 }
 
@@ -1819,9 +1819,10 @@ function edgeEndPos(t, toSide) {
 function applyEdgeStyle(pathEl, e, selected) {
   const da = dashArray(e.dash);
   pathEl.setAttribute("stroke-dasharray", da === "none" ? "" : da);
-  const col = edgeColor(e.color, selected);
-  pathEl.setAttribute("stroke", col.stroke);
-  pathEl.setAttribute("stroke-width", selected ? "2.5" : "2");
+  const col = edgeColor(e.color);
+  // Use inline style (not setAttribute) so it wins over the CSS class rule
+  pathEl.style.stroke = col.stroke;
+  pathEl.style.strokeWidth = selected ? "2.5" : "2";
   pathEl.setAttribute("marker-end",   e.arrow!=="none" ? `url(#arr-${col.marker})` : "");
   pathEl.setAttribute("marker-start", e.arrow==="both"  ? `url(#arr-start-${col.marker})` : "");
 }
@@ -2858,8 +2859,7 @@ async function selectOrgFromList(id, name) {
   fitView();
 }
 
-// Load org list once companyId is known
-if (companyId) loadOrgList();
+// (org list is loaded after tryAutoLoad above, once companyId is known)
 
 /* ── Name sync with Pipedrive ────────────────────────────────── */
 // When user edits a name in the orgchart, push it to Pipedrive and update locally.
