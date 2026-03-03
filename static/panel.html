@@ -472,8 +472,7 @@
       pointer-events: stroke;
     }
     /* JS adds .edge-hover class on mouseenter, removes on mouseleave */
-    /* stroke color is managed entirely by JS (applyEdgeStyle) to respect per-edge color */
-    .edge-group.edge-hover .edge-path { opacity: 0.75; }
+    .edge-group.edge-hover .edge-path { opacity: 0.82; }
     .edge-group.edge-selected .edge-path { stroke-width: 2.5; }
 
     /* ✕ delete button — hidden by default via opacity, not display:none */
@@ -1535,7 +1534,7 @@ async function tryAutoLoad() {
   }
 }
 await tryAutoLoad();
-// Load org list now — all window.* functions are defined at this point
+// Load org list now — companyId is fully resolved after SDK init + tryAutoLoad
 if (companyId) window.loadOrgList();
 
 /* ── Render ──────────────────────────────────────────────────── */
@@ -1723,7 +1722,8 @@ const EDGE_COLORS = {
 };
 const EDGE_COLOR_SELECTED = { stroke:"#1c64f2", marker:"blue" };
 
-function edgeColor(color) {
+function edgeColor(color, selected) {
+  if (selected) return EDGE_COLOR_SELECTED;
   return EDGE_COLORS[color] || EDGE_COLORS.default;
 }
 
@@ -1819,8 +1819,8 @@ function edgeEndPos(t, toSide) {
 function applyEdgeStyle(pathEl, e, selected) {
   const da = dashArray(e.dash);
   pathEl.setAttribute("stroke-dasharray", da === "none" ? "" : da);
-  const col = edgeColor(e.color);
-  // Use inline style (not setAttribute) so it wins over the CSS class rule
+  const col = edgeColor(e.color, selected);
+  // Use style.stroke (inline style) not setAttribute — CSS class rule would override setAttribute
   pathEl.style.stroke = col.stroke;
   pathEl.style.strokeWidth = selected ? "2.5" : "2";
   pathEl.setAttribute("marker-end",   e.arrow!=="none" ? `url(#arr-${col.marker})` : "");
@@ -2859,7 +2859,7 @@ async function selectOrgFromList(id, name) {
   fitView();
 }
 
-// (org list is loaded after tryAutoLoad above, once companyId is known)
+// (loadOrgList is called after tryAutoLoad() above, where companyId is guaranteed resolved)
 
 /* ── Name sync with Pipedrive ────────────────────────────────── */
 // When user edits a name in the orgchart, push it to Pipedrive and update locally.
@@ -2900,7 +2900,7 @@ async function refreshPersonNamesFromPD() {
   if (changed) { renderAll(); markDirty(); }
 }
 
-window.fitView = function() {
+window.fitView = function fitView() {
   const ns = Object.values(nodes);
   if (!ns.length) return;
   const pad = 40;
@@ -2918,7 +2918,7 @@ window.fitView = function() {
 };
 
 /* ── Clear ───────────────────────────────────────────────────── */
-window.clearAll = function() {
+window.clearAll = function clearAll() {
   if (!confirm("Clear the entire canvas? This cannot be undone.")) return;
   nodes = {}; edges = []; frames = []; nidC = 0; eidC = 0; fidC = 0;
   renderAll(); markDirty();
