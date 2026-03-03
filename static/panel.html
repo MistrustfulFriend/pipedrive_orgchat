@@ -528,6 +528,89 @@
     .et-del { color: var(--red); }
     .et-del:hover { background: #fef2f2; border-color: rgba(224,36,36,.25); color: var(--red); }
 
+    /* ─── Edge color swatches ──────────────────────────────────── */
+    .et-swatch {
+      width: 18px; height: 18px;
+      border-radius: 50%;
+      border: 2px solid transparent;
+      cursor: pointer;
+      flex-shrink: 0;
+      transition: transform .1s, border-color .1s;
+      padding: 0;
+    }
+    .et-swatch:hover { transform: scale(1.2); }
+    .et-swatch.active { border-color: var(--text); transform: scale(1.15); }
+
+    /* ─── Add dropdown separator ───────────────────────────────── */
+    .add-dd-sep { height: 1px; background: var(--border); margin: 4px 0; }
+
+    /* ─── Department Frames ────────────────────────────────────── */
+    #frames-layer {
+      position: absolute; inset: 0;
+      pointer-events: none;
+      transform-origin: 0 0;
+    }
+    .frame {
+      position: absolute;
+      border-radius: 10px;
+      border: 2px solid;
+      pointer-events: all;
+      cursor: move;
+      user-select: none;
+    }
+    .frame-header {
+      display: flex; align-items: center; gap: 6px;
+      padding: 6px 10px 4px;
+      border-radius: 8px 8px 0 0;
+    }
+    .frame-label {
+      font-size: 11px; font-weight: 700; letter-spacing: 0.06em;
+      text-transform: uppercase;
+      flex: 1;
+      background: none; border: none;
+      cursor: text;
+      outline: none;
+      color: inherit;
+      min-width: 40px;
+    }
+    .frame-del {
+      width: 18px; height: 18px;
+      border: none; background: none; border-radius: 4px;
+      cursor: pointer; opacity: 0;
+      display: flex; align-items: center; justify-content: center;
+      transition: opacity .12s, background .12s;
+      color: inherit; padding: 0;
+    }
+    .frame:hover .frame-del { opacity: 0.6; }
+    .frame-del:hover { opacity: 1 !important; background: rgba(0,0,0,.08); }
+    .frame-del svg { width: 11px; height: 11px; stroke: currentColor; fill: none; stroke-width: 2.5; stroke-linecap: round; }
+    .frame-resize {
+      position: absolute; right: 0; bottom: 0;
+      width: 16px; height: 16px;
+      cursor: nwse-resize;
+      opacity: 0;
+      transition: opacity .12s;
+    }
+    .frame:hover .frame-resize { opacity: 0.5; }
+    .frame-resize::after {
+      content: '';
+      position: absolute; right: 4px; bottom: 4px;
+      width: 8px; height: 8px;
+      border-right: 2px solid currentColor;
+      border-bottom: 2px solid currentColor;
+      border-radius: 1px;
+    }
+
+    /* Frame color themes */
+    .frame-blue   { background: rgba(28,100,242,.06);  border-color: rgba(28,100,242,.3);  color: #1c64f2; }
+    .frame-green  { background: rgba(22,163,74,.06);   border-color: rgba(22,163,74,.3);   color: #16a34a; }
+    .frame-purple { background: rgba(124,58,237,.06);  border-color: rgba(124,58,237,.3);  color: #7c3aed; }
+    .frame-orange { background: rgba(217,119,6,.06);   border-color: rgba(217,119,6,.3);   color: #d97706; }
+    .frame-red    { background: rgba(224,36,36,.06);   border-color: rgba(224,36,36,.3);   color: #e02424; }
+    .frame-teal   { background: rgba(8,145,178,.06);   border-color: rgba(8,145,178,.3);   color: #0891b2; }
+    .frame-pink   { background: rgba(219,39,119,.06);  border-color: rgba(219,39,119,.3);  color: #db2777; }
+    .frame-grey   { background: rgba(148,163,184,.08); border-color: rgba(148,163,184,.35);color: #64748b; }
+
     #drag-line {
       fill: none;
       stroke: var(--blue);
@@ -978,6 +1061,11 @@
         <svg viewBox="0 0 24 24"><circle cx="12" cy="8" r="4" stroke-dasharray="2.5 2"/><path d="M6 20v-2a4 4 0 014-4h4a4 4 0 014 4v2" stroke-dasharray="2.5 2"/></svg>
         <div><div class="add-dd-label">Placeholder</div><div class="add-dd-sub">Open position</div></div>
       </div>
+      <div class="add-dd-sep"></div>
+      <div class="add-dd-item" onclick="addFrame();closeAddDropdown()">
+        <svg viewBox="0 0 24 24"><rect x="3" y="3" width="18" height="18" rx="3"/><line x1="3" y1="9" x2="21" y2="9"/></svg>
+        <div><div class="add-dd-label">Department Frame</div><div class="add-dd-sub">Group nodes visually</div></div>
+      </div>
     </div>
   </div>
 
@@ -1063,30 +1151,44 @@
     </div>
 
     <svg id="svg-layer" xmlns="http://www.w3.org/2000/svg">
-      <defs>
-        <!-- markerUnits=userSpaceOnUse: sizes in canvas px, not stroke-width multiples.
-             Arrow is 10px long, 8px wide. refX=10 puts the TIP at the path endpoint. -->
-        <marker id="arr" markerWidth="10" markerHeight="8" refX="10" refY="4" orient="auto" markerUnits="userSpaceOnUse">
-          <polygon points="0 0, 10 4, 0 8" fill="#b0bac8"/>
-        </marker>
-        <marker id="arr-blue" markerWidth="10" markerHeight="8" refX="10" refY="4" orient="auto" markerUnits="userSpaceOnUse">
-          <polygon points="0 0, 10 4, 0 8" fill="#1c64f2"/>
-        </marker>
-        <marker id="arr-start" markerWidth="10" markerHeight="8" refX="0" refY="4" orient="auto-start-reverse" markerUnits="userSpaceOnUse">
-          <polygon points="0 0, 10 4, 0 8" fill="#b0bac8"/>
-        </marker>
-        <marker id="arr-start-blue" markerWidth="10" markerHeight="8" refX="0" refY="4" orient="auto-start-reverse" markerUnits="userSpaceOnUse">
-          <polygon points="0 0, 10 4, 0 8" fill="#1c64f2"/>
-        </marker>
+      <defs id="svg-defs">
+        <!-- Arrow markers generated per-color. markerUnits=userSpaceOnUse → sizes in canvas px.
+             Arrow tip is at x=10. refX=10 places tip exactly at the path endpoint. -->
+        <!-- grey (default) -->
+        <marker id="arr-grey" markerWidth="10" markerHeight="8" refX="10" refY="4" orient="auto" markerUnits="userSpaceOnUse"><polygon points="0 0,10 4,0 8" fill="#b0bac8"/></marker>
+        <marker id="arr-start-grey" markerWidth="10" markerHeight="8" refX="0" refY="4" orient="auto-start-reverse" markerUnits="userSpaceOnUse"><polygon points="0 0,10 4,0 8" fill="#b0bac8"/></marker>
+        <!-- blue -->
+        <marker id="arr-blue" markerWidth="10" markerHeight="8" refX="10" refY="4" orient="auto" markerUnits="userSpaceOnUse"><polygon points="0 0,10 4,0 8" fill="#1c64f2"/></marker>
+        <marker id="arr-start-blue" markerWidth="10" markerHeight="8" refX="0" refY="4" orient="auto-start-reverse" markerUnits="userSpaceOnUse"><polygon points="0 0,10 4,0 8" fill="#1c64f2"/></marker>
+        <!-- green -->
+        <marker id="arr-green" markerWidth="10" markerHeight="8" refX="10" refY="4" orient="auto" markerUnits="userSpaceOnUse"><polygon points="0 0,10 4,0 8" fill="#16a34a"/></marker>
+        <marker id="arr-start-green" markerWidth="10" markerHeight="8" refX="0" refY="4" orient="auto-start-reverse" markerUnits="userSpaceOnUse"><polygon points="0 0,10 4,0 8" fill="#16a34a"/></marker>
+        <!-- red -->
+        <marker id="arr-red" markerWidth="10" markerHeight="8" refX="10" refY="4" orient="auto" markerUnits="userSpaceOnUse"><polygon points="0 0,10 4,0 8" fill="#e02424"/></marker>
+        <marker id="arr-start-red" markerWidth="10" markerHeight="8" refX="0" refY="4" orient="auto-start-reverse" markerUnits="userSpaceOnUse"><polygon points="0 0,10 4,0 8" fill="#e02424"/></marker>
+        <!-- orange -->
+        <marker id="arr-orange" markerWidth="10" markerHeight="8" refX="10" refY="4" orient="auto" markerUnits="userSpaceOnUse"><polygon points="0 0,10 4,0 8" fill="#d97706"/></marker>
+        <marker id="arr-start-orange" markerWidth="10" markerHeight="8" refX="0" refY="4" orient="auto-start-reverse" markerUnits="userSpaceOnUse"><polygon points="0 0,10 4,0 8" fill="#d97706"/></marker>
+        <!-- purple -->
+        <marker id="arr-purple" markerWidth="10" markerHeight="8" refX="10" refY="4" orient="auto" markerUnits="userSpaceOnUse"><polygon points="0 0,10 4,0 8" fill="#7c3aed"/></marker>
+        <marker id="arr-start-purple" markerWidth="10" markerHeight="8" refX="0" refY="4" orient="auto-start-reverse" markerUnits="userSpaceOnUse"><polygon points="0 0,10 4,0 8" fill="#7c3aed"/></marker>
+        <!-- teal -->
+        <marker id="arr-teal" markerWidth="10" markerHeight="8" refX="10" refY="4" orient="auto" markerUnits="userSpaceOnUse"><polygon points="0 0,10 4,0 8" fill="#0891b2"/></marker>
+        <marker id="arr-start-teal" markerWidth="10" markerHeight="8" refX="0" refY="4" orient="auto-start-reverse" markerUnits="userSpaceOnUse"><polygon points="0 0,10 4,0 8" fill="#0891b2"/></marker>
+        <!-- pink -->
+        <marker id="arr-pink" markerWidth="10" markerHeight="8" refX="10" refY="4" orient="auto" markerUnits="userSpaceOnUse"><polygon points="0 0,10 4,0 8" fill="#db2777"/></marker>
+        <marker id="arr-start-pink" markerWidth="10" markerHeight="8" refX="0" refY="4" orient="auto-start-reverse" markerUnits="userSpaceOnUse"><polygon points="0 0,10 4,0 8" fill="#db2777"/></marker>
       </defs>
       <!-- Single transform group — pan+zoom applied here once for both edges and drag line -->
       <g id="canvas-g">
+        <g id="frames-g"></g>
         <g id="edges-g"></g>
         <line id="drag-line" marker-end="url(#arr-blue)"
           style="fill:none;stroke:#1864d4;stroke-width:2;stroke-dasharray:6 3;display:none;pointer-events:none"/>
       </g>
     </svg>
 
+    <div id="frames-layer"></div>
     <div id="nodes-layer"></div>
 
     <div id="connect-banner">⇄ Drag from a port to connect — Esc to cancel</div>
@@ -1144,6 +1246,16 @@
       <button class="et-btn active" id="et-arrow-end" onclick="setEdgeArrow('end')" title="Arrow at end">→ End</button>
       <button class="et-btn" id="et-arrow-both" onclick="setEdgeArrow('both')" title="Arrow both ends">↔ Both</button>
       <button class="et-btn" id="et-arrow-none" onclick="setEdgeArrow('none')" title="No arrow">— None</button>
+      <div class="et-sep"></div>
+      <!-- Color swatches -->
+      <button class="et-swatch active" id="et-color-default" onclick="setEdgeColor('default')" title="Default" style="background:#b0bac8"></button>
+      <button class="et-swatch" id="et-color-blue"    onclick="setEdgeColor('blue')"    title="Blue"   style="background:#1c64f2"></button>
+      <button class="et-swatch" id="et-color-green"   onclick="setEdgeColor('green')"   title="Green"  style="background:#16a34a"></button>
+      <button class="et-swatch" id="et-color-red"     onclick="setEdgeColor('red')"     title="Red"    style="background:#e02424"></button>
+      <button class="et-swatch" id="et-color-orange"  onclick="setEdgeColor('orange')"  title="Orange" style="background:#d97706"></button>
+      <button class="et-swatch" id="et-color-purple"  onclick="setEdgeColor('purple')"  title="Purple" style="background:#7c3aed"></button>
+      <button class="et-swatch" id="et-color-teal"    onclick="setEdgeColor('teal')"    title="Teal"   style="background:#0891b2"></button>
+      <button class="et-swatch" id="et-color-pink"    onclick="setEdgeColor('pink')"    title="Pink"   style="background:#db2777"></button>
       <div class="et-sep"></div>
       <button class="et-btn et-del" onclick="deleteEdge(selectedEdgeId)">
         <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round" style="width:12px;height:12px"><polyline points="3 6 5 6 21 6"/><path d="M19 6l-1 14H6L5 6"/></svg>
@@ -1303,9 +1415,11 @@ if (!companyId) {
 
 /* ── State ───────────────────────────────────────────────────── */
 let nodes   = {};  // id → {id, name, title, dept, pdPersonId, placeholder, x, y}
-let edges   = [];  // [{id, from, to, shape, dash, arrow}]  shape=curved|straight|elbow  dash=solid|dashed|dotted  arrow=end|both|none
+let edges   = [];  // [{id, from, to, fromSide, toSide, shape, dash, arrow, color}]
+let frames  = [];  // [{id, label, color, x, y, w, h}]
 let nidC    = 0;
 let eidC    = 0;
+let fidC    = 0;
 let connSrc       = null;
 let selectedPerson = null;
 let editNodeId    = null;
@@ -1335,6 +1449,9 @@ function applyTransform() {
   // nodes-layer: CSS transform
   nodesEl.style.transform = `translate(${panX}px,${panY}px) scale(${zoom})`;
   nodesEl.style.transformOrigin = "0 0";
+  // frames-layer: same transform
+  framesLayer.style.transform = `translate(${panX}px,${panY}px) scale(${zoom})`;
+  framesLayer.style.transformOrigin = "0 0";
   // SVG: one real SVG transform on the shared group — edges + dragLine move together
   canvasG.setAttribute("transform", `translate(${panX},${panY}) scale(${zoom})`);
   document.getElementById("zoom-label").textContent = Math.round(zoom*100)+"%";
@@ -1421,6 +1538,7 @@ await tryAutoLoad();
 function renderAll() {
   nodesEl.innerHTML = "";
   while (edgesG.firstChild) edgesG.removeChild(edgesG.firstChild);
+  renderAllFrames();
   Object.values(nodes).forEach(makeNodeEl);
   // Render deal badges FIRST so node heights are final before drawing edges
   Object.values(nodes).forEach(n => { if (n.pdPersonId && dealsCache[n.pdPersonId]) renderNodeDealBadge(n); });
@@ -1516,11 +1634,16 @@ function bestEntryPort(f, t, fw, fh, tw, th) {
   /* bottom */          return {side, x:tcx,        y:t.y+th};
 }
 
-function edgePathForStyle(f, t, shape) {
+function edgePathForStyle(f, t, shape, fromSide, toSide) {
   shape = shape || "curved";
   const fw=nodeW(f), fh=nodeH(f), tw=nodeW(t), th=nodeH(t);
-  const src  = bestPort(f, t, fw, fh, tw, th);
-  const dst  = bestEntryPort(f, t, fw, fh, tw, th);
+
+  // Use stored port sides if available; otherwise auto-pick based on geometry
+  const src = fromSide ? fixedPort(f, fromSide, fw, fh)
+                       : bestPort(f, t, fw, fh, tw, th);
+  const dst = toSide   ? fixedPort(t, toSide,   tw, th)
+                       : bestEntryPort(f, t, fw, fh, tw, th);
+
   const x1=src.x, y1=src.y, x2=dst.x, y2=dst.y;
 
   if (shape === "straight") {
@@ -1544,21 +1667,24 @@ function edgePathForStyle(f, t, shape) {
     return pts;
   }
 
-  // curved — smooth cubic bezier.
-  // Control points extend OUTWARD from each border so the curve bows away from nodes.
-  // outDir = direction the path leaves the source border
-  // inDir  = direction the path approaches the target border (from outside = reversed normal)
+  // curved — smooth cubic bezier
   const dist = Math.max(Math.abs(x2-x1), Math.abs(y2-y1));
   const pull = Math.min(Math.max(dist * 0.45, 40), 150);
-
   const outDir = { right:[1,0], left:[-1,0], bottom:[0,1], top:[0,-1] };
   const inDir  = { left:[-1,0], right:[1,0], top:[0,-1], bottom:[0,1] };
-
   const [odx,ody] = outDir[src.side];
   const [idx,idy] = inDir[dst.side];
   const cpx1 = x1 + odx*pull,  cpy1 = y1 + ody*pull;
   const cpx2 = x2 + idx*pull,  cpy2 = y2 + idy*pull;
   return `M${x1},${y1} C${cpx1},${cpy1} ${cpx2},${cpy2} ${x2},${y2}`;
+}
+
+// Fixed port — returns exact border point for a given side, ignoring target position
+function fixedPort(n, side, nw, nh) {
+  if (side==="right")  return {side:"right",  x:n.x+nw,    y:n.y+nh/2};
+  if (side==="left")   return {side:"left",   x:n.x,        y:n.y+nh/2};
+  if (side==="top")    return {side:"top",    x:n.x+nw/2,  y:n.y};
+  /* bottom */          return {side:"bottom", x:n.x+nw/2,  y:n.y+nh};
 }
 
 // Wrapper used externally
@@ -1580,19 +1706,32 @@ function edgeMidpoint(pathD) {
   return [0,0];
 }
 
-function dashArray(dash) {
-  if (dash==="dashed") return "8 5";
-  if (dash==="dotted") return "2 5";
+// Edge color palette — each entry: {stroke, marker} where marker = id suffix in SVG defs
+const EDGE_COLORS = {
+  default: { stroke:"#b0bac8", marker:"grey"   },
+  blue:    { stroke:"#1c64f2", marker:"blue"   },
+  green:   { stroke:"#16a34a", marker:"green"  },
+  red:     { stroke:"#e02424", marker:"red"    },
+  orange:  { stroke:"#d97706", marker:"orange" },
+  purple:  { stroke:"#7c3aed", marker:"purple" },
+  teal:    { stroke:"#0891b2", marker:"teal"   },
+  pink:    { stroke:"#db2777", marker:"pink"   },
+};
+const EDGE_COLOR_SELECTED = { stroke:"#1c64f2", marker:"blue" };
+
+function edgeColor(color, selected) {
+  if (selected) return EDGE_COLOR_SELECTED;
+  return EDGE_COLORS[color] || EDGE_COLORS.default;
+}
+
+function edgeDash(dash) {
+  if (dash === "dashed") return "8 5";
+  if (dash === "dotted") return "2 5";
   return "none";
 }
 
-function markerEnd(arrow, selected) {
-  if (arrow==="none") return "";
-  return selected ? "url(#arr-blue)" : "url(#arr)";
-}
-function markerStart(arrow, selected) {
-  if (arrow!=="both") return "";
-  return selected ? "url(#arr-start-blue)" : "url(#arr-start)";
+function svgEl(tag) {
+  return document.createElementNS("http://www.w3.org/2000/svg", tag);
 }
 
 function svgEl(tag) { return document.createElementNS("http://www.w3.org/2000/svg", tag); }
@@ -1602,29 +1741,29 @@ function makeEdgeEl(e) {
   if (!f || !t) return;
 
   // Ensure style fields exist (backwards compat with saved charts)
-  e.shape = e.shape || "curved";
-  e.dash  = e.dash  || "solid";
-  e.arrow = e.arrow || "end";
+  e.shape    = e.shape    || "curved";
+  e.dash     = e.dash     || "solid";
+  e.arrow    = e.arrow    || "end";
+  e.color    = e.color    || "default";
+  e.fromSide = e.fromSide || null;
+  e.toSide   = e.toSide   || null;
 
   const g = svgEl("g");
   g.id = "ed-"+e.id;
   g.className.baseVal = "edge-group";
 
-  const d = edgePathForStyle(f, t, e.shape);
+  const d = edgePathForStyle(f, t, e.shape, e.fromSide, e.toSide);
 
-  // Wide invisible hit area
   const hit = svgEl("path");
   hit.setAttribute("class","edge-hit");
   hit.setAttribute("d", d);
   hit.setAttribute("pointer-events","stroke");
 
-  // Visible line
   const path = svgEl("path");
   path.setAttribute("class","edge-path");
   path.setAttribute("d", d);
   applyEdgeStyle(path, e, false);
 
-  // JS hover
   hit.addEventListener("mouseenter", () => g.classList.add("edge-hover"));
   hit.addEventListener("mouseleave", ev => {
     if (!ev.relatedTarget || !g.contains(ev.relatedTarget)) g.classList.remove("edge-hover");
@@ -1634,7 +1773,6 @@ function makeEdgeEl(e) {
   });
   hit.addEventListener("click", ev => { ev.stopPropagation(); selectEdge(e.id); });
 
-  // ── Delete ✕ at midpoint (kept small, only visible on hover/select via CSS)
   const [mx,my] = edgeMidpoint(d);
   const delG = svgEl("g");
   delG.setAttribute("class","edge-del-btn");
@@ -1651,13 +1789,11 @@ function makeEdgeEl(e) {
     if (!ev.relatedTarget || !g.contains(ev.relatedTarget)) g.classList.remove("edge-hover");
   });
 
-  // ── Reroute handle near arrowhead — drag to reconnect to a different target
-  const [rx,ry] = edgeEndPos(t);
+  const [rx,ry] = edgeEndPos(t, e.toSide);
   const rrG = svgEl("g");
   rrG.setAttribute("class","edge-reroute-btn");
   rrG.setAttribute("transform",`translate(${rx},${ry})`);
   const rrc = svgEl("circle"); rrc.setAttribute("class","edge-reroute-circle"); rrc.setAttribute("r","8");
-  // Arrow icon inside
   const rra = svgEl("path"); rra.setAttribute("class","edge-reroute-arrow");
   rra.setAttribute("d","M-3,0 L3,0 M1,-2 L3,0 L1,2");
   rrG.appendChild(rrc); rrG.appendChild(rra);
@@ -1671,18 +1807,23 @@ function makeEdgeEl(e) {
   edgesG.appendChild(g);
 }
 
-// Returns a point just outside the target node's entry border — where the reroute handle sits
-function edgeEndPos(t) {
+// Returns a point outside the target entry border for the reroute handle
+function edgeEndPos(t, toSide) {
   const tw = nodeW(t), th = nodeH(t);
-  // Place handle at bottom-center of target, offset outward 18px so it clears the node
-  return [t.x + tw/2, t.y + th + 18];
+  const side = toSide || "bottom";
+  if (side==="top")    return [t.x+tw/2,  t.y-20];
+  if (side==="left")   return [t.x-20,    t.y+th/2];
+  if (side==="right")  return [t.x+tw+20, t.y+th/2];
+  /* bottom */          return [t.x+tw/2,  t.y+th+20];
 }
 
 function applyEdgeStyle(pathEl, e, selected) {
   const da = dashArray(e.dash);
   pathEl.setAttribute("stroke-dasharray", da === "none" ? "" : da);
-  pathEl.setAttribute("marker-end",   markerEnd(e.arrow, selected));
-  pathEl.setAttribute("marker-start", markerStart(e.arrow, selected));
+  const col = edgeColor(e.color, selected);
+  pathEl.setAttribute("stroke", col.stroke);
+  pathEl.setAttribute("marker-end",   e.arrow!=="none" ? `url(#arr-${col.marker})` : "");
+  pathEl.setAttribute("marker-start", e.arrow==="both"  ? `url(#arr-start-${col.marker})` : "");
 }
 
 function refreshNodeEdges(nid) {
@@ -1691,11 +1832,11 @@ function refreshNodeEdges(nid) {
     const g = document.getElementById("ed-"+e.id);
     if (!g) return;
     const f = nodes[e.from], t = nodes[e.to];
-    const d = edgePathForStyle(f, t, e.shape);
+    const d = edgePathForStyle(f, t, e.shape, e.fromSide, e.toSide);
     g.querySelectorAll(".edge-hit,.edge-path").forEach(p => p.setAttribute("d",d));
     const [mx,my] = edgeMidpoint(d);
     g.querySelector(".edge-del-btn")?.setAttribute("transform",`translate(${mx},${my})`);
-    const [rx,ry] = edgeEndPos(t);
+    const [rx,ry] = edgeEndPos(t, e.toSide);
     g.querySelector(".edge-reroute-btn")?.setAttribute("transform",`translate(${rx},${ry})`);
   });
 }
@@ -1746,6 +1887,10 @@ function showEdgeToolbar(eid) {
   ["end","both","none"].forEach(s => {
     document.getElementById("et-arrow-"+s)?.classList.toggle("active", e.arrow===s);
   });
+  // Color swatches
+  Object.keys(EDGE_COLORS).forEach(c => {
+    document.getElementById("et-color-"+c)?.classList.toggle("active", (e.color||"default")===c);
+  });
 
   // Position toolbar near the midpoint of the edge, in screen space
   const g = document.getElementById("ed-"+eid);
@@ -1778,11 +1923,10 @@ window.setEdgeShape = function(shape) {
   e.shape = shape;
   const g = document.getElementById("ed-"+e.id);
   const f = nodes[e.from], t = nodes[e.to];
-  const d = edgePathForStyle(f, t, shape);
+  const d = edgePathForStyle(f, t, shape, e.fromSide, e.toSide);
   g?.querySelectorAll(".edge-hit,.edge-path").forEach(p=>p.setAttribute("d",d));
   const [mx,my] = edgeMidpoint(d);
   g?.querySelector(".edge-del-btn")?.setAttribute("transform",`translate(${mx},${my})`);
-  // Update toolbar active states
   ["curved","straight","elbow"].forEach(s=>document.getElementById("et-"+s)?.classList.toggle("active",s===shape));
   markDirty();
   showEdgeToolbar(selectedEdgeId);
@@ -1809,6 +1953,18 @@ window.setEdgeArrow = function(arrow) {
   const path = g?.querySelector(".edge-path");
   if (path) applyEdgeStyle(path, e, true);
   ["end","both","none"].forEach(s=>document.getElementById("et-arrow-"+s)?.classList.toggle("active",s===arrow));
+  markDirty();
+};
+
+window.setEdgeColor = function(color) {
+  if (selectedEdgeId == null) return;
+  const e = edges.find(x=>x.id===selectedEdgeId);
+  if (!e) return;
+  e.color = color;
+  const g = document.getElementById("ed-"+e.id);
+  const path = g?.querySelector(".edge-path");
+  if (path) applyEdgeStyle(path, e, true);
+  Object.keys(EDGE_COLORS).forEach(c=>document.getElementById("et-color-"+c)?.classList.toggle("active",c===color));
   markDirty();
 };
 canvasEl.addEventListener("click", e => {
@@ -1894,8 +2050,8 @@ function startEdgeDrag(fromId, ev) {
   const isGroupDrag = selectedNodes.has(fromId) && selectedNodes.size >= 2;
   const groupIds = isGroupDrag ? [...selectedNodes] : [fromId];
 
-  const side = ev.target.dataset.side || "bottom";
-  const [sx, sy] = portPos(fromId, side);
+  const fromSide = ev.target.dataset.side || "bottom";
+  const [sx, sy] = portPos(fromId, fromSide);
   dragLine.setAttribute("x1", sx); dragLine.setAttribute("y1", sy);
   const [lx, ly] = clientToCanvas(ev.clientX, ev.clientY);
   dragLine.setAttribute("x2", lx); dragLine.setAttribute("y2", ly);
@@ -1916,15 +2072,18 @@ function startEdgeDrag(fromId, ev) {
     connSrc = null;
     document.removeEventListener("mousemove", onMove);
     document.removeEventListener("mouseup", onUp);
+    // Check if dropped on a port dot — capture toSide
+    const portEl = document.elementFromPoint(me.clientX, me.clientY)?.closest(".port");
+    const toSide = portEl?.dataset.side || null; // null = auto
     const hit = document.elementFromPoint(me.clientX, me.clientY)?.closest(".node");
     if (hit) {
       const toId = hit.id.replace("nd-","");
       if (isGroupDrag) {
         let count = 0;
-        groupIds.forEach(gid => { if (gid !== toId && addEdge(gid, toId)) count++; });
+        groupIds.forEach(gid => { if (gid !== toId && addEdge(gid, toId, fromSide, toSide)) count++; });
         if (count) setStatus(`Connected ${count} nodes`);
       } else if (toId !== fromId) {
-        addEdge(fromId, toId);
+        addEdge(fromId, toId, fromSide, toSide);
       }
     }
   }
@@ -1932,10 +2091,15 @@ function startEdgeDrag(fromId, ev) {
   document.addEventListener("mouseup", onUp);
 }
 
-function addEdge(fromId, toId) {
+function addEdge(fromId, toId, fromSide, toSide) {
   if (edges.find(e=>e.from===fromId&&e.to===toId)) return false;
   if (fromId === toId) return false;
-  const e = {id: ++eidC, from: fromId, to: toId, shape:"curved", dash:"solid", arrow:"end"};
+  const e = {
+    id: ++eidC, from: fromId, to: toId,
+    fromSide: fromSide || null,  // null = auto-pick each render
+    toSide:   toSide   || null,
+    shape:"curved", dash:"solid", arrow:"end", color:"default"
+  };
   edges.push(e);
   makeEdgeEl(e);
   markDirty();
@@ -1950,6 +2114,130 @@ function deleteEdge(eid) {
   markDirty();
   setStatus("Connection removed");
 }
+
+/* ── Department Frames ───────────────────────────────────────── */
+const FRAME_COLORS = ["blue","green","purple","orange","red","teal","pink","grey"];
+let frameDragging = null;
+
+function addFrame() {
+  // Place new frame in center of current viewport
+  const rect = canvasEl.getBoundingClientRect();
+  const cx = (rect.width/2  - panX) / zoom;
+  const cy = (rect.height/2 - panY) / zoom;
+  const colorIdx = frames.length % FRAME_COLORS.length;
+  const f = {
+    id: ++fidC,
+    label: "Department",
+    color: FRAME_COLORS[colorIdx],
+    x: cx - 160, y: cy - 100,
+    w: 320, h: 220
+  };
+  frames.push(f);
+  makeFrameEl(f);
+  markDirty();
+}
+
+function makeFrameEl(f) {
+  const el = document.createElement("div");
+  el.className = `frame frame-${f.color}`;
+  el.id = "fr-"+f.id;
+  el.style.cssText = `left:${f.x}px;top:${f.y}px;width:${f.w}px;height:${f.h}px`;
+
+  el.innerHTML = `
+    <div class="frame-header">
+      <input class="frame-label" value="${escHtml(f.label)}" 
+        oninput="updateFrameLabel(${f.id},this.value)"
+        onmousedown="event.stopPropagation()" />
+      <div class="frame-color-dots" id="fr-colors-${f.id}" style="display:flex;gap:3px;align-items:center">
+        ${FRAME_COLORS.map(c=>`<button onclick="setFrameColor(${f.id},'${c}')" 
+          style="width:10px;height:10px;border-radius:50%;border:1.5px solid transparent;padding:0;cursor:pointer;background:var(--frame-${c}-dot,${frameColorDot(c)});transition:transform .1s"
+          title="${c}"></button>`).join("")}
+      </div>
+      <button class="frame-del" onclick="deleteFrame(${f.id})" title="Delete frame">
+        <svg viewBox="0 0 24 24"><line x1="18" y1="6" x2="6" y2="18"/><line x1="6" y1="6" x2="18" y2="18"/></svg>
+      </button>
+    </div>
+    <div class="frame-resize" id="fr-rsz-${f.id}"></div>
+  `;
+
+  // Drag to move
+  el.addEventListener("mousedown", ev => {
+    if (ev.target.closest(".frame-label") || ev.target.closest(".frame-del") ||
+        ev.target.closest(".frame-resize") || ev.target.closest(".frame-color-dots")) return;
+    ev.stopPropagation();
+    const ox = ev.clientX, oy = ev.clientY;
+    const fx0 = f.x, fy0 = f.y;
+    function onMove(me) {
+      f.x = fx0 + (me.clientX-ox)/zoom;
+      f.y = fy0 + (me.clientY-oy)/zoom;
+      el.style.left = f.x+"px"; el.style.top = f.y+"px";
+      markDirty();
+    }
+    function onUp() {
+      document.removeEventListener("mousemove", onMove);
+      document.removeEventListener("mouseup", onUp);
+    }
+    document.addEventListener("mousemove", onMove);
+    document.addEventListener("mouseup", onUp);
+  });
+
+  // Resize handle
+  const rsz = el.querySelector(".frame-resize");
+  rsz.addEventListener("mousedown", ev => {
+    ev.stopPropagation(); ev.preventDefault();
+    const ox = ev.clientX, oy = ev.clientY;
+    const fw0 = f.w, fh0 = f.h;
+    function onMove(me) {
+      f.w = Math.max(120, fw0 + (me.clientX-ox)/zoom);
+      f.h = Math.max(80,  fh0 + (me.clientY-oy)/zoom);
+      el.style.width = f.w+"px"; el.style.height = f.h+"px";
+      markDirty();
+    }
+    function onUp() {
+      document.removeEventListener("mousemove", onMove);
+      document.removeEventListener("mouseup", onUp);
+    }
+    document.addEventListener("mousemove", onMove);
+    document.addEventListener("mouseup", onUp);
+  });
+
+  framesLayer.appendChild(el);
+}
+
+function frameColorDot(c) {
+  const map = {blue:"#1c64f2",green:"#16a34a",purple:"#7c3aed",orange:"#d97706",
+               red:"#e02424",teal:"#0891b2",pink:"#db2777",grey:"#94a3b8"};
+  return map[c]||"#94a3b8";
+}
+
+window.updateFrameLabel = function(id, val) {
+  const f = frames.find(x=>x.id===id);
+  if (f) { f.label = val; markDirty(); }
+};
+
+window.setFrameColor = function(id, color) {
+  const f = frames.find(x=>x.id===id);
+  if (!f) return;
+  f.color = color;
+  const el = document.getElementById("fr-"+id);
+  if (el) {
+    el.className = `frame frame-${color}`;
+  }
+  markDirty();
+};
+
+window.deleteFrame = function(id) {
+  frames = frames.filter(f=>f.id!==id);
+  document.getElementById("fr-"+id)?.remove();
+  markDirty();
+};
+
+function renderAllFrames() {
+  framesLayer.innerHTML = "";
+  frames.forEach(makeFrameEl);
+}
+
+const framesLayer = document.getElementById("frames-layer");
 
 /* ── Drag nodes ──────────────────────────────────────────────── */
 function dragNode(el, n) {
@@ -2241,7 +2529,7 @@ window.selectOrg = async function(id, name) {
   document.getElementById("org-picker-label").textContent = name;
   document.getElementById("org-dropdown").style.display = "none";
   orgPickerOpen = false;
-  nodes = {}; edges = []; nidC = 0; eidC = 0;
+  nodes = {}; edges = []; frames = []; nidC = 0; eidC = 0; fidC = 0;
   renderAll();
   await loadChart();
 };
@@ -2266,7 +2554,7 @@ async function doSave() {
       body: JSON.stringify({
         orgId, companyId,
         chartName: document.getElementById("chart-name-input").value.trim() || "Org Chart",
-        chart: JSON.stringify({nodes, edges, nidC, eidC}),
+        chart: JSON.stringify({nodes, edges, frames, nidC, eidC, fidC}),
       }),
     });
     const d = await r.json();
@@ -2283,7 +2571,7 @@ async function loadChart() {
     const d = await fetch(`/api/orgchart/load?orgId=${orgId}&companyId=${companyId}`).then(r=>r.json());
     if (d.chart) {
       const c = JSON.parse(d.chart);
-      nodes = c.nodes||{}; edges = c.edges||[]; nidC = c.nidC||0; eidC = c.eidC||0;
+      nodes = c.nodes||{}; edges = c.edges||[]; frames = c.frames||[]; nidC = c.nidC||0; eidC = c.eidC||0; fidC = c.fidC||0;
       if (d.chartName) document.getElementById("chart-name-input").value = d.chartName;
       renderAll();
       setStatus(`Loaded: ${orgName||orgId}`);
@@ -2634,7 +2922,7 @@ window.fitView = function() {
 /* ── Clear ───────────────────────────────────────────────────── */
 window.clearAll = function() {
   if (!confirm("Clear the entire canvas? This cannot be undone.")) return;
-  nodes = {}; edges = []; nidC = 0; eidC = 0;
+  nodes = {}; edges = []; frames = []; nidC = 0; eidC = 0; fidC = 0;
   renderAll(); markDirty();
 };
 
