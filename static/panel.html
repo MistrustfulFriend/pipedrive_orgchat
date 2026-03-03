@@ -1435,6 +1435,7 @@ let zoom = 1.0, panX = 0, panY = 0;
 
 const canvasEl  = document.getElementById("canvas-wrap");
 const nodesEl   = document.getElementById("nodes-layer");
+const framesLayer = document.getElementById("frames-layer");
 const edgesG    = document.getElementById("edges-g");
 const canvasG   = document.getElementById("canvas-g");   // shared SVG transform group
 const dragLine  = document.getElementById("drag-line");
@@ -1724,14 +1725,10 @@ function edgeColor(color, selected) {
   return EDGE_COLORS[color] || EDGE_COLORS.default;
 }
 
-function edgeDash(dash) {
-  if (dash === "dashed") return "8 5";
-  if (dash === "dotted") return "2 5";
+function dashArray(dash) {
+  if (dash==="dashed") return "8 5";
+  if (dash==="dotted") return "2 5";
   return "none";
-}
-
-function svgEl(tag) {
-  return document.createElementNS("http://www.w3.org/2000/svg", tag);
 }
 
 function svgEl(tag) { return document.createElementNS("http://www.w3.org/2000/svg", tag); }
@@ -2237,8 +2234,6 @@ function renderAllFrames() {
   frames.forEach(makeFrameEl);
 }
 
-const framesLayer = document.getElementById("frames-layer");
-
 /* ── Drag nodes ──────────────────────────────────────────────── */
 function dragNode(el, n) {
   let ox, oy, nx0, ny0, active = false, didMove = false;
@@ -2297,7 +2292,7 @@ function dragNode(el, n) {
 let selStart = null;
 
 canvasEl.addEventListener("mousedown", e => {
-  if (e.target.closest(".node") || e.target.closest("#zoom-controls")) return;
+  if (e.target.closest(".node") || e.target.closest("#zoom-controls") || e.target.closest(".frame")) return;
   // Middle-click or Space+drag OR right-click → pan the canvas
   const isPan = e.button === 1 || e.button === 2 || spaceDown;
   if (isPan) {
