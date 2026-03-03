@@ -485,6 +485,15 @@
     .edge-del-btn:hover .edge-del-circle { fill: var(--red); }
     .edge-del-btn:hover .edge-del-x { stroke: white; }
 
+    /* ⇄ reroute handle — blue circle near arrowhead, drag to reconnect */
+    .edge-reroute-btn { cursor: crosshair; opacity: 0; transition: opacity .12s; pointer-events: none; }
+    .edge-reroute-circle { fill: white; stroke: var(--blue); stroke-width: 1.5; transition: fill .12s; }
+    .edge-reroute-arrow { stroke: var(--blue); stroke-width: 2; stroke-linecap: round; stroke-linejoin: round; fill: none; }
+    .edge-group.edge-hover .edge-reroute-btn,
+    .edge-group.edge-selected .edge-reroute-btn { opacity: 1; pointer-events: all; }
+    .edge-reroute-btn:hover .edge-reroute-circle { fill: var(--blue); }
+    .edge-reroute-btn:hover .edge-reroute-arrow { stroke: white; }
+
     /* ─── Edge style toolbar (appears when edge selected) ── */
     #edge-toolbar {
       position: fixed;
@@ -1055,17 +1064,20 @@
 
     <svg id="svg-layer" xmlns="http://www.w3.org/2000/svg">
       <defs>
-        <marker id="arr" markerWidth="7" markerHeight="6" refX="6" refY="3" orient="auto">
-          <polygon points="0 0, 7 3, 0 6" fill="#b0bac8"/>
+        <!-- markerUnits=strokeWidth: marker scales with stroke.
+             The polygon tip is at x=6. refX=6 places the tip exactly at the path endpoint.
+             With stroke-width=2 the rendered arrowhead is ~12×10px. -->
+        <marker id="arr" markerWidth="6" markerHeight="5" refX="6" refY="2.5" orient="auto" markerUnits="strokeWidth">
+          <polygon points="0 0, 6 2.5, 0 5" fill="#b0bac8"/>
         </marker>
-        <marker id="arr-blue" markerWidth="7" markerHeight="6" refX="6" refY="3" orient="auto">
-          <polygon points="0 0, 7 3, 0 6" fill="#1c64f2"/>
+        <marker id="arr-blue" markerWidth="6" markerHeight="5" refX="6" refY="2.5" orient="auto" markerUnits="strokeWidth">
+          <polygon points="0 0, 6 2.5, 0 5" fill="#1c64f2"/>
         </marker>
-        <marker id="arr-start" markerWidth="7" markerHeight="6" refX="1" refY="3" orient="auto-start-reverse">
-          <polygon points="0 0, 7 3, 0 6" fill="#b0bac8"/>
+        <marker id="arr-start" markerWidth="6" markerHeight="5" refX="0" refY="2.5" orient="auto-start-reverse" markerUnits="strokeWidth">
+          <polygon points="0 0, 6 2.5, 0 5" fill="#b0bac8"/>
         </marker>
-        <marker id="arr-start-blue" markerWidth="7" markerHeight="6" refX="1" refY="3" orient="auto-start-reverse">
-          <polygon points="0 0, 7 3, 0 6" fill="#1c64f2"/>
+        <marker id="arr-start-blue" markerWidth="6" markerHeight="5" refX="0" refY="2.5" orient="auto-start-reverse" markerUnits="strokeWidth">
+          <polygon points="0 0, 6 2.5, 0 5" fill="#1c64f2"/>
         </marker>
       </defs>
       <!-- Single transform group — pan+zoom applied here once for both edges and drag line -->
@@ -1475,44 +1487,33 @@ function nodeH(n) { return document.getElementById("nd-"+n.id)?.offsetHeight || 
 
 /* ── Edge geometry ────────────────────────────────────────────── */
 // Returns the best exit port {side, x, y} from node f toward node t
+// Endpoint lands exactly ON the border — the SVG marker positions the arrow tip.
 function bestPort(f, t, fw, fh, tw, th) {
   const fcx = f.x+fw/2, fcy = f.y+fh/2;
   const tcx = t.x+tw/2, tcy = t.y+th/2;
   const dx = tcx-fcx, dy = tcy-fcy;
-  // Pick the side whose outward direction most aligns with the vector to target
-  const scores = {
-    right:  dx,
-    left:  -dx,
-    bottom: dy,
-    top:   -dy,
-  };
+  const scores = { right:dx, left:-dx, bottom:dy, top:-dy };
   const side = Object.entries(scores).sort((a,b)=>b[1]-a[1])[0][0];
-  const cx = f.x+fw/2, cy = f.y+fh/2;
-  if (side==="right")  return {side, x:f.x+fw, y:cy};
-  if (side==="left")   return {side, x:f.x,    y:cy};
-  if (side==="bottom") return {side, x:cx,     y:f.y+fh};
-  /* top */             return {side, x:cx,     y:f.y};
+  if (side==="right")  return {side, x:f.x+fw,   y:fcy};
+  if (side==="left")   return {side, x:f.x,       y:fcy};
+  if (side==="bottom") return {side, x:f.x+fw/2,  y:f.y+fh};
+  /* top */             return {side, x:f.x+fw/2,  y:f.y};
 }
 
-// Returns the best entry port {side, x, y} on node t coming FROM direction of f
+// Returns the best entry port {side, x, y} on node t coming FROM node f.
+// Endpoint lands exactly ON the node border — refX=6 on the marker puts the
+// arrowhead tip precisely there without any manual shortening.
 function bestEntryPort(f, t, fw, fh, tw, th) {
   const fcx = f.x+fw/2, fcy = f.y+fh/2;
   const tcx = t.x+tw/2, tcy = t.y+th/2;
   const dx = tcx-fcx, dy = tcy-fcy;
-  // The entry side faces TOWARD the source — opposite scoring
-  const scores = {
-    left:   dx,
-    right: -dx,
-    top:    dy,
-    bottom:-dy,
-  };
+  // Entry side faces TOWARD the source
+  const scores = { left:dx, right:-dx, top:dy, bottom:-dy };
   const side = Object.entries(scores).sort((a,b)=>b[1]-a[1])[0][0];
-  const cx = t.x+tw/2, cy = t.y+th/2;
-  const ARROW = 12; // gap so arrowhead clears the border cleanly
-  if (side==="left")   return {side, x:t.x     - ARROW, y:cy};
-  if (side==="right")  return {side, x:t.x+tw  + ARROW, y:cy};
-  if (side==="top")    return {side, x:cx,              y:t.y    - ARROW};
-  /* bottom */          return {side, x:cx,              y:t.y+th + ARROW};
+  if (side==="left")   return {side, x:t.x,       y:tcy};
+  if (side==="right")  return {side, x:t.x+tw,    y:tcy};
+  if (side==="top")    return {side, x:tcx,        y:t.y};
+  /* bottom */          return {side, x:tcx,        y:t.y+th};
 }
 
 function edgePathForStyle(f, t, shape) {
@@ -1649,8 +1650,31 @@ function makeEdgeEl(e) {
     if (!ev.relatedTarget || !g.contains(ev.relatedTarget)) g.classList.remove("edge-hover");
   });
 
-  g.appendChild(hit); g.appendChild(path); g.appendChild(delG);
+  // ── Reroute handle near arrowhead — drag to reconnect to a different target
+  const [rx,ry] = edgeEndPos(t);
+  const rrG = svgEl("g");
+  rrG.setAttribute("class","edge-reroute-btn");
+  rrG.setAttribute("transform",`translate(${rx},${ry})`);
+  const rrc = svgEl("circle"); rrc.setAttribute("class","edge-reroute-circle"); rrc.setAttribute("r","8");
+  // Arrow icon inside
+  const rra = svgEl("path"); rra.setAttribute("class","edge-reroute-arrow");
+  rra.setAttribute("d","M-3,0 L3,0 M1,-2 L3,0 L1,2");
+  rrG.appendChild(rrc); rrG.appendChild(rra);
+  rrG.addEventListener("mouseenter", () => g.classList.add("edge-hover"));
+  rrG.addEventListener("mouseleave", ev => {
+    if (!ev.relatedTarget || !g.contains(ev.relatedTarget)) g.classList.remove("edge-hover");
+  });
+  rrG.addEventListener("mousedown", ev => { ev.stopPropagation(); ev.preventDefault(); startEdgeReroute(e.id, ev); });
+
+  g.appendChild(hit); g.appendChild(path); g.appendChild(delG); g.appendChild(rrG);
   edgesG.appendChild(g);
+}
+
+// Returns a point just outside the target node's entry border — where the reroute handle sits
+function edgeEndPos(t) {
+  const tw = nodeW(t), th = nodeH(t);
+  // Place handle at bottom-center of target, offset outward 18px so it clears the node
+  return [t.x + tw/2, t.y + th + 18];
 }
 
 function applyEdgeStyle(pathEl, e, selected) {
@@ -1670,6 +1694,8 @@ function refreshNodeEdges(nid) {
     g.querySelectorAll(".edge-hit,.edge-path").forEach(p => p.setAttribute("d",d));
     const [mx,my] = edgeMidpoint(d);
     g.querySelector(".edge-del-btn")?.setAttribute("transform",`translate(${mx},${my})`);
+    const [rx,ry] = edgeEndPos(t);
+    g.querySelector(".edge-reroute-btn")?.setAttribute("transform",`translate(${rx},${ry})`);
   });
 }
 
@@ -1795,12 +1821,16 @@ function startEdgeReroute(edgeId, ev) {
   const g = document.getElementById("ed-"+edgeId);
   if (g) g.style.opacity = "0.3";
 
-  const [sx, sy] = portPos(edge.from, "bottom");
-  dragLine.setAttribute("x1", sx); dragLine.setAttribute("y1", sy);
+  // Start drag line from the source node's exit port (auto-selected side)
+  const f = nodes[edge.from];
+  const t = nodes[edge.to];
+  const fw = nodeW(f), fh = nodeH(f), tw = nodeW(t), th = nodeH(t);
+  const src = bestPort(f, t, fw, fh, tw, th);
+  dragLine.setAttribute("x1", src.x); dragLine.setAttribute("y1", src.y);
   const [lx, ly] = clientToCanvas(ev.clientX, ev.clientY);
   dragLine.setAttribute("x2", lx); dragLine.setAttribute("y2", ly);
   dragLine.style.display = "block";
-  banner.textContent = "⇄ Drop on a node to reroute this connection — Esc to cancel";
+  banner.textContent = "⇄ Drop on a node to reroute — Esc to cancel";
   banner.style.display = "block";
 
   function onMove(me) {
@@ -1817,10 +1847,19 @@ function startEdgeReroute(edgeId, ev) {
     const hit = document.elementFromPoint(me.clientX, me.clientY)?.closest(".node");
     if (hit && hit.id !== "nd-"+edge.from) {
       const newTo = hit.id.replace("nd-","");
+      // Preserve style when rerouting
+      const savedStyle = {shape: edge.shape, dash: edge.dash, arrow: edge.arrow};
       edges = edges.filter(e => e.id !== edgeId);
       document.getElementById("ed-"+edgeId)?.remove();
-      addEdge(edge.from, newTo);
-      setStatus("Connection rerouted");
+      if (addEdge(edge.from, newTo)) {
+        // Copy style to the new edge
+        const newEdge = edges.find(e => e.from===edge.from && e.to===newTo);
+        if (newEdge) { newEdge.shape=savedStyle.shape; newEdge.dash=savedStyle.dash; newEdge.arrow=savedStyle.arrow; }
+        const newG = document.getElementById("ed-"+newEdge?.id);
+        const newPath = newG?.querySelector(".edge-path");
+        if (newEdge && newPath) applyEdgeStyle(newPath, newEdge, false);
+        setStatus("Connection rerouted");
+      }
     }
     clearEdgeSelection();
   }
