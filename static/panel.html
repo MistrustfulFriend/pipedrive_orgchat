@@ -1781,12 +1781,16 @@ function makeEdgeEl(e) {
   if (!f || !t) return;
 
   // Ensure style fields exist (backwards compat with saved charts)
-  e.shape    = e.shape    || "curved";
-  e.dash     = e.dash     || "solid";
-  e.arrow    = e.arrow    || "end";
-  e.color    = e.color    || "default";
-  e.fromSide = e.fromSide || null;
-  e.toSide   = e.toSide   || null;
+  e.shape = e.shape || "curved";
+  e.dash  = e.dash  || "solid";
+  e.arrow = e.arrow || "end";
+  e.color = e.color || "default";
+  // Lock sides if missing (old saved charts may have null) — compute once and store so they never shift
+  if (!e.fromSide || !e.toSide) {
+    const fw = nodeW(f), fh = nodeH(f), tw = nodeW(t), th = nodeH(t);
+    if (!e.fromSide) e.fromSide = bestPort(f, t, fw, fh, tw, th).side;
+    if (!e.toSide)   e.toSide   = bestEntryPort(f, t, fw, fh, tw, th).side;
+  }
 
   const g = svgEl("g");
   g.id = "ed-"+e.id;
@@ -2136,10 +2140,16 @@ function startEdgeDrag(fromId, ev) {
 function addEdge(fromId, toId, fromSide, toSide) {
   if (edges.find(e=>e.from===fromId&&e.to===toId)) return false;
   if (fromId === toId) return false;
+  const f = nodes[fromId], t = nodes[toId];
+  // Compute and LOCK sides immediately so they never shift when nodes are moved.
+  // If the user dragged from a specific port, honour that; otherwise auto-pick best now.
+  const fw = nodeW(f), fh = nodeH(f), tw = nodeW(t), th = nodeH(t);
+  const lockedFrom = fromSide || bestPort(f, t, fw, fh, tw, th).side;
+  const lockedTo   = toSide   || bestEntryPort(f, t, fw, fh, tw, th).side;
   const e = {
     id: ++eidC, from: fromId, to: toId,
-    fromSide: fromSide || null,  // null = auto-pick each render
-    toSide:   toSide   || null,
+    fromSide: lockedFrom,
+    toSide:   lockedTo,
     shape:"curved", dash:"solid", arrow:"end", color:"default"
   };
   edges.push(e);
@@ -2615,6 +2625,9 @@ async function doSave() {
 async function loadChart() {
   if (!orgId) return;
   setStatus("Loading…");
+  // Always clear canvas before loading — so switching to an empty org clears old data
+  nodes = {}; edges = []; frames = []; nidC = 0; eidC = 0; fidC = 0;
+  renderAll();
   try {
     const d = await fetch(`/api/orgchart/load?orgId=${orgId}&companyId=${companyId}`).then(r=>r.json());
     if (d.chart) {
@@ -2623,8 +2636,8 @@ async function loadChart() {
       if (d.chartName) document.getElementById("chart-name-input").value = d.chartName;
       renderAll();
       setStatus(`Loaded: ${orgName||orgId}`);
-      fetchAllDeals(); // load deal badges after chart renders
-      refreshPersonNamesFromPD(); // sync names from Pipedrive
+      fetchAllDeals();
+      refreshPersonNamesFromPD();
     } else {
       setStatus("No saved chart — start building!");
     }
