@@ -296,14 +296,14 @@
       inset: 0;
       width: 100%; height: 100%;
       pointer-events: none;  /* layer itself transparent */
-      z-index: 3;            /* above nodes-layer so edge hit areas work */
+      z-index: 2;            /* below nodes */
     }
     #edges-g { pointer-events: all; }
     #drag-g   { pointer-events: none; }
     #nodes-layer {
       position: absolute;
       inset: 0;
-      z-index: 2;
+      z-index: 4;
       pointer-events: none; /* nodes themselves re-enable pointer-events */
     }
     #nodes-layer .node {
@@ -549,6 +549,7 @@
       position: absolute; inset: 0;
       pointer-events: none;
       transform-origin: 0 0;
+      z-index: 3;
     }
     .frame {
       position: absolute;
@@ -1353,7 +1354,7 @@ let pdDomain  = "";   // e.g. "eacesgmbh-sandbox.pipedrive.com" — for deep lin
 let sdk       = null;
 
 try {
-  sdk = await new AppExtensionsSDK().initialize();
+    sdk = await new AppExtensionsSDK().initialize();
   try { await sdk.execute(Command.RESIZE, { width: 1100, height: 700 }); } catch(e) {}
 
   let ctx = {};
@@ -2103,7 +2104,7 @@ function addEdge(fromId, toId, fromSide, toSide) {
   return true;
 }
 
-function deleteEdge(eid) {
+window.deleteEdge = function deleteEdge(eid) {
   edges = edges.filter(e => e.id !== eid);
   document.getElementById("ed-"+eid)?.remove();
   clearEdgeSelection();
@@ -2116,7 +2117,7 @@ function deleteEdge(eid) {
 const FRAME_COLORS = ["blue","green","purple","orange","red","teal","pink","grey"];
 let frameDragging = null;
 
-function addFrame() {
+window.addFrame = function addFrame() {
   // Place new frame in center of current viewport
   const rect = canvasEl.getBoundingClientRect();
   const cx = (rect.width/2  - panX) / zoom;
@@ -2807,7 +2808,7 @@ function fmtVal(v) {
 /* ── Org list in sidebar ─────────────────────────────────────── */
 let allOrgs = [];
 
-async function loadOrgList() {
+window.loadOrgList = async function loadOrgList() {
   if (!companyId) return;
   const el = document.getElementById("sb-org-list");
   el.innerHTML = '<div class="sb-deals-empty">Loading…</div>';
@@ -2842,7 +2843,7 @@ function renderOrgList(orgs) {
   });
 }
 
-function filterOrgList(q) {
+window.filterOrgList = function filterOrgList(q) {
   const filtered = q ? allOrgs.filter(o => o.name.toLowerCase().includes(q.toLowerCase())) : allOrgs;
   renderOrgList(filtered);
 }
