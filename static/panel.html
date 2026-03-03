@@ -319,12 +319,12 @@
       border-radius: 11px;
       cursor: grab;
       user-select: none;
-      transition: border-color .15s, box-shadow .15s, transform .1s;
+      transition: border-color .15s, box-shadow .15s;
       box-shadow: var(--shadow);
     }
     .node:hover { border-color: var(--border2); box-shadow: var(--shadow-md); z-index: 10; }
     .node.selected { border-color: var(--blue); box-shadow: 0 0 0 3px var(--blueDim), var(--shadow-md); }
-    .node.dragging { cursor: grabbing; z-index: 50; box-shadow: var(--shadow-lg); transform: scale(1.02); }
+    .node.dragging { cursor: grabbing; z-index: 50; box-shadow: var(--shadow-lg); transform: scale(1.02); will-change: left, top; }
     .node.placeholder-node { border-style: dashed; border-color: rgba(124,58,237,0.4); background: rgba(124,58,237,0.06); }
     .node.placeholder-node:hover { border-color: var(--purple); }
 
@@ -1173,10 +1173,22 @@ try {
   if (!companyId) companyId = String(ctx.companyId || "");
 
   // Extract org ID + name from context.
-  // Pipedrive v0 SDK: ctx.data = { id, name?, object: "organization" }
+  // Pipedrive SDK can deliver context in several shapes depending on the panel type:
+  //   - ctx.data = { id, name, object: "organization" }   (org panel)
+  //   - ctx.selectedIds = [42]                             (some panel types)
+  //   - ctx.id                                             (older SDK)
   const data = ctx.data || {};
-  if (data.id)    orgId   = String(data.id);
-  if (data.name)  orgName = String(data.name);
+  if (data.object === "organization" || data.object === "Organisation") {
+    if (data.id)   orgId   = String(data.id);
+    if (data.name) orgName = String(data.name);
+  }
+  // Fallback: top-level id/name on ctx itself
+  if (!orgId && ctx.id)   orgId   = String(ctx.id);
+  if (!orgName && ctx.name) orgName = String(ctx.name);
+  // Fallback: selectedIds array
+  if (!orgId && Array.isArray(ctx.selectedIds) && ctx.selectedIds.length) {
+    orgId = String(ctx.selectedIds[0]);
+  }
 
   // Extract domain from referrer for deep links (person/deal pages)
   const refUrl = document.referrer || "";
@@ -1185,9 +1197,15 @@ try {
 
   // If SDK gave no orgId, try parsing it from the referrer URL
   // Pipedrive org pages: https://company.pipedrive.com/organization/42
+  //                  or: https://company.pipedrive.com/organizations/42
   if (!orgId) {
-    const fromRef  = refUrl.match(/\/organization\/(\d+)/i);
+    const fromRef = refUrl.match(/\/organizations?\/(\d+)/i);
     if (fromRef) orgId = fromRef[1];
+  }
+  // Also try the URL query string (some embedded panels pass orgId as a param)
+  if (!orgId) {
+    const urlOrgId = _p.get("orgId") || _p.get("organizationId") || _p.get("org_id");
+    if (urlOrgId) orgId = urlOrgId;
   }
 
 } catch(e) {
@@ -1389,22 +1407,24 @@ function nodeH(n) { return document.getElementById("nd-"+n.id)?.offsetHeight || 
 
 /* ── Edge elements ───────────────────────────────────────────── */
 function edgePath(f, t) {
-  // Path terminates exactly at node border. With refX=markerWidth on the marker,
-  // the arrowhead tip lands precisely on the endpoint — no shortening needed.
+  // The arrowhead marker has markerWidth=6, stroke-width=2 → visual size ≈ 12px.
+  // We shorten the path endpoint by ~10px so the arrowhead tip lands ON the node
+  // border without overlapping the card itself.
+  const ARROW = 10;
   const fw = nodeW(f), fh = nodeH(f), tw = nodeW(t), th = nodeH(t);
   const fcx = f.x + fw/2, fcy = f.y + fh/2;
   const tcx = t.x + tw/2, tcy = t.y + th/2;
   const dx = tcx - fcx, dy = tcy - fcy;
   let x1, y1, x2, y2, cpx1, cpy1, cpx2, cpy2;
   if (Math.abs(dx) > Math.abs(dy)) {
-    if (dx > 0) { x1 = f.x+fw; y1 = fcy; x2 = t.x;   y2 = tcy; }
-    else        { x1 = f.x;    y1 = fcy; x2 = t.x+tw; y2 = tcy; }
+    if (dx > 0) { x1 = f.x+fw; y1 = fcy; x2 = t.x - ARROW;   y2 = tcy; }
+    else        { x1 = f.x;    y1 = fcy; x2 = t.x+tw + ARROW; y2 = tcy; }
     const g = Math.abs(x2-x1)*0.5;
     cpx1 = x1+(dx>0?g:-g); cpy1 = y1;
     cpx2 = x2-(dx>0?g:-g); cpy2 = y2;
   } else {
-    if (dy > 0) { x1 = fcx; y1 = f.y+fh; x2 = tcx; y2 = t.y;    }
-    else        { x1 = fcx; y1 = f.y;     x2 = tcx; y2 = t.y+th; }
+    if (dy > 0) { x1 = fcx; y1 = f.y+fh; x2 = tcx; y2 = t.y - ARROW;    }
+    else        { x1 = fcx; y1 = f.y;     x2 = tcx; y2 = t.y+th + ARROW; }
     const g = Math.abs(y2-y1)*0.5;
     cpx1 = x1; cpy1 = y1+(dy>0?g:-g);
     cpx2 = x2; cpy2 = y2-(dy>0?g:-g);
@@ -1668,6 +1688,8 @@ function deleteEdge(eid) {
 function dragNode(el, n) {
   let ox, oy, nx0, ny0, active = false, didMove = false;
   let groupSnap = {};
+  let rafId = null;
+  let pendingDx = 0, pendingDy = 0;
 
   el.addEventListener("mousedown", e => {
     if (e.target.closest(".nha-btn")) return;
@@ -1685,21 +1707,26 @@ function dragNode(el, n) {
   document.addEventListener("mousemove", e => {
     if (!active) return;
     didMove = true;
-    const dx = (e.clientX - ox) / zoom;
-    const dy = (e.clientY - oy) / zoom;
-    if (selectedNodes.has(n.id) && Object.keys(groupSnap).length > 1) {
-      selectedNodes.forEach(nid => {
-        const s = groupSnap[nid]; if (!s) return;
-        nodes[nid].x = s.x+dx; nodes[nid].y = s.y+dy;
-        const nel = document.getElementById("nd-"+nid);
-        if (nel) { nel.style.left=nodes[nid].x+"px"; nel.style.top=nodes[nid].y+"px"; }
-        refreshNodeEdges(nid);
-      });
-    } else {
-      n.x = nx0+dx; n.y = ny0+dy;
-      el.style.left = n.x+"px"; el.style.top = n.y+"px";
-      refreshNodeEdges(n.id);
-    }
+    pendingDx = (e.clientX - ox) / zoom;
+    pendingDy = (e.clientY - oy) / zoom;
+    if (rafId) return; // coalesce multiple mousemove events in one frame
+    rafId = requestAnimationFrame(() => {
+      rafId = null;
+      const dx = pendingDx, dy = pendingDy;
+      if (selectedNodes.has(n.id) && Object.keys(groupSnap).length > 1) {
+        selectedNodes.forEach(nid => {
+          const s = groupSnap[nid]; if (!s) return;
+          nodes[nid].x = s.x+dx; nodes[nid].y = s.y+dy;
+          const nel = document.getElementById("nd-"+nid);
+          if (nel) { nel.style.left=nodes[nid].x+"px"; nel.style.top=nodes[nid].y+"px"; }
+          refreshNodeEdges(nid);
+        });
+      } else {
+        n.x = nx0+dx; n.y = ny0+dy;
+        el.style.left = n.x+"px"; el.style.top = n.y+"px";
+        refreshNodeEdges(n.id);
+      }
+    });
   });
 
   document.addEventListener("mouseup", e => {
@@ -2224,9 +2251,14 @@ async function loadOrgList() {
   const el = document.getElementById("sb-org-list");
   el.innerHTML = '<div class="sb-deals-empty">Loading…</div>';
   try {
-    // Fetch first 50 orgs sorted by name — enough for a quick-pick list
-    const r = await fetch(`/api/orgs/search?q=&companyId=${companyId}&limit=50`).then(x=>x.json());
+    // Use the dedicated list endpoint that returns orgs without needing a search term
+    const r = await fetch(`/api/orgs/list?companyId=${companyId}&limit=100`).then(x=>x.json());
     allOrgs = r.orgs || [];
+    if (r.more) {
+      // Fetch next page too (up to 200 total)
+      const r2 = await fetch(`/api/orgs/list?companyId=${companyId}&limit=100&start=100`).then(x=>x.json());
+      allOrgs = allOrgs.concat(r2.orgs || []);
+    }
     renderOrgList(allOrgs);
   } catch(e) {
     el.innerHTML = '<div class="sb-deals-empty">Could not load</div>';

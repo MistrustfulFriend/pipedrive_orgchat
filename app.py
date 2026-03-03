@@ -489,5 +489,80 @@ def orgs_search(q: str = "", companyId: str = ""):
     return {"orgs": orgs}
 
 
+@app.get("/api/orgs/list")
+def orgs_list(companyId: str = "", limit: int = 100, start: int = 0):
+    """Fetch a paginated list of all organisations (no search term required)."""
+    access_token = get_valid_token(companyId)
+    if not access_token:
+        return JSONResponse({"error": "Not connected"}, status_code=401)
+
+    headers = {"Authorization": f"Bearer {access_token}"}
+    r = requests.get(
+        "https://api.pipedrive.com/v1/organizations",
+        headers=headers,
+        params={"limit": min(limit, 100), "start": start, "sort": "name ASC"},
+        timeout=15,
+    )
+    if r.status_code != 200:
+        return {"orgs": [], "more": False}
+
+    body = r.json()
+    data = body.get("data") or []
+    additional = body.get("additional_data") or {}
+    pagination = additional.get("pagination") or {}
+    more = bool(pagination.get("more_items_in_collection"))
+    orgs = [{"id": o["id"], "name": o["name"]} for o in data if o.get("name")]
+    return {"orgs": orgs, "more": more}
+
+
+@app.get("/api/person/info")
+def person_info(personId: str = "", companyId: str = ""):
+    """Fetch current name and title for a Pipedrive person."""
+    if not personId or not companyId:
+        return JSONResponse({"error": "Missing personId or companyId"}, status_code=400)
+    access_token = get_valid_token(companyId)
+    if not access_token:
+        return JSONResponse({"error": "Not connected"}, status_code=401)
+    headers = {"Authorization": f"Bearer {access_token}"}
+    r = requests.get(
+        f"https://api.pipedrive.com/v1/persons/{personId}",
+        headers=headers,
+        timeout=15,
+    )
+    if r.status_code != 200:
+        return {"person": None}
+    data = r.json().get("data") or {}
+    return {
+        "person": {
+            "id": data.get("id"),
+            "name": data.get("name", ""),
+            "title": data.get("job_title") or "",
+        }
+    }
+
+
+@app.post("/api/person/update-name")
+async def person_update_name(payload: dict):
+    """Update a person's name in Pipedrive."""
+    person_id  = str(payload.get("personId", ""))
+    company_id = str(payload.get("companyId", ""))
+    new_name   = str(payload.get("name", "")).strip()
+    if not person_id or not company_id or not new_name:
+        return JSONResponse({"error": "Missing required fields"}, status_code=400)
+    access_token = get_valid_token(company_id)
+    if not access_token:
+        return JSONResponse({"error": "Not connected"}, status_code=401)
+    headers = {"Authorization": f"Bearer {access_token}", "Content-Type": "application/json"}
+    r = requests.put(
+        f"https://api.pipedrive.com/v1/persons/{person_id}",
+        headers=headers,
+        json={"name": new_name},
+        timeout=15,
+    )
+    if r.status_code not in (200, 201):
+        return JSONResponse({"error": "Pipedrive update failed", "body": r.text}, status_code=400)
+    return {"ok": True}
+
+
 # Static files
 app.mount("/static", StaticFiles(directory=STATIC_DIR), name="static")
