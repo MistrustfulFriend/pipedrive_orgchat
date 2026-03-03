@@ -1064,20 +1064,19 @@
 
     <svg id="svg-layer" xmlns="http://www.w3.org/2000/svg">
       <defs>
-        <!-- markerUnits=strokeWidth: marker scales with stroke.
-             The polygon tip is at x=6. refX=6 places the tip exactly at the path endpoint.
-             With stroke-width=2 the rendered arrowhead is ~12×10px. -->
-        <marker id="arr" markerWidth="6" markerHeight="5" refX="6" refY="2.5" orient="auto" markerUnits="strokeWidth">
-          <polygon points="0 0, 6 2.5, 0 5" fill="#b0bac8"/>
+        <!-- markerUnits=userSpaceOnUse: sizes in canvas px, not stroke-width multiples.
+             Arrow is 10px long, 8px wide. refX=10 puts the TIP at the path endpoint. -->
+        <marker id="arr" markerWidth="10" markerHeight="8" refX="10" refY="4" orient="auto" markerUnits="userSpaceOnUse">
+          <polygon points="0 0, 10 4, 0 8" fill="#b0bac8"/>
         </marker>
-        <marker id="arr-blue" markerWidth="6" markerHeight="5" refX="6" refY="2.5" orient="auto" markerUnits="strokeWidth">
-          <polygon points="0 0, 6 2.5, 0 5" fill="#1c64f2"/>
+        <marker id="arr-blue" markerWidth="10" markerHeight="8" refX="10" refY="4" orient="auto" markerUnits="userSpaceOnUse">
+          <polygon points="0 0, 10 4, 0 8" fill="#1c64f2"/>
         </marker>
-        <marker id="arr-start" markerWidth="6" markerHeight="5" refX="0" refY="2.5" orient="auto-start-reverse" markerUnits="strokeWidth">
-          <polygon points="0 0, 6 2.5, 0 5" fill="#b0bac8"/>
+        <marker id="arr-start" markerWidth="10" markerHeight="8" refX="0" refY="4" orient="auto-start-reverse" markerUnits="userSpaceOnUse">
+          <polygon points="0 0, 10 4, 0 8" fill="#b0bac8"/>
         </marker>
-        <marker id="arr-start-blue" markerWidth="6" markerHeight="5" refX="0" refY="2.5" orient="auto-start-reverse" markerUnits="strokeWidth">
-          <polygon points="0 0, 6 2.5, 0 5" fill="#1c64f2"/>
+        <marker id="arr-start-blue" markerWidth="10" markerHeight="8" refX="0" refY="4" orient="auto-start-reverse" markerUnits="userSpaceOnUse">
+          <polygon points="0 0, 10 4, 0 8" fill="#1c64f2"/>
         </marker>
       </defs>
       <!-- Single transform group — pan+zoom applied here once for both edges and drag line -->
@@ -1423,10 +1422,11 @@ function renderAll() {
   nodesEl.innerHTML = "";
   while (edgesG.firstChild) edgesG.removeChild(edgesG.firstChild);
   Object.values(nodes).forEach(makeNodeEl);
+  // Render deal badges FIRST so node heights are final before drawing edges
+  Object.values(nodes).forEach(n => { if (n.pdPersonId && dealsCache[n.pdPersonId]) renderNodeDealBadge(n); });
+  // NOW draw edges — node offsetHeights are correct
   edges.forEach(makeEdgeEl);
   syncEmpty();
-  // Re-render deal badges for any already-cached data
-  Object.values(nodes).forEach(n => { if (n.pdPersonId && dealsCache[n.pdPersonId]) renderNodeDealBadge(n); });
   renderSidebarDeals();
 }
 
@@ -1528,7 +1528,6 @@ function edgePathForStyle(f, t, shape) {
   }
 
   if (shape === "elbow") {
-    // Orthogonal / elbow routing
     const srcSide = src.side, dstSide = dst.side;
     let pts;
     if ((srcSide==="bottom"||srcSide==="top") && (dstSide==="bottom"||dstSide==="top")) {
@@ -1545,18 +1544,20 @@ function edgePathForStyle(f, t, shape) {
     return pts;
   }
 
-  // curved (default) — smooth cubic bezier
-  const dx = x2-x1, dy = y2-y1;
-  let cpx1, cpy1, cpx2, cpy2;
-  const dist = Math.max(Math.abs(dx), Math.abs(dy));
-  const pull = Math.min(dist*0.5, 120);
+  // curved — smooth cubic bezier.
+  // Control points extend OUTWARD from each border so the curve bows away from nodes.
+  // outDir = direction the path leaves the source border
+  // inDir  = direction the path approaches the target border (from outside = reversed normal)
+  const dist = Math.max(Math.abs(x2-x1), Math.abs(y2-y1));
+  const pull = Math.min(Math.max(dist * 0.45, 40), 150);
 
-  const outDirs = {right:[1,0], left:[-1,0], bottom:[0,1], top:[0,-1]};
-  const inDirs  = {left:[1,0], right:[-1,0], top:[0,1], bottom:[0,-1]};
-  const [odx,ody] = outDirs[src.side];
-  const [idx,idy] = inDirs[dst.side];
-  cpx1 = x1 + odx*pull; cpy1 = y1 + ody*pull;
-  cpx2 = x2 + idx*pull; cpy2 = y2 + idy*pull;
+  const outDir = { right:[1,0], left:[-1,0], bottom:[0,1], top:[0,-1] };
+  const inDir  = { left:[-1,0], right:[1,0], top:[0,-1], bottom:[0,1] };
+
+  const [odx,ody] = outDir[src.side];
+  const [idx,idy] = inDir[dst.side];
+  const cpx1 = x1 + odx*pull,  cpy1 = y1 + ody*pull;
+  const cpx2 = x2 + idx*pull,  cpy2 = y2 + idy*pull;
   return `M${x1},${y1} C${cpx1},${cpy1} ${cpx2},${cpy2} ${x2},${y2}`;
 }
 
@@ -2324,8 +2325,11 @@ async function fetchAllDeals() {
   }
   setStatus("Loading deals…");
   await Promise.all(linked.map(n => fetchPersonDeals(n.pdPersonId)));
-  // Re-render badges on all nodes
+  // Render badges — this changes node offsetHeight
   linked.forEach(n => renderNodeDealBadge(n));
+  // Redraw ALL edges now that node heights are final
+  while (edgesG.firstChild) edgesG.removeChild(edgesG.firstChild);
+  edges.forEach(makeEdgeEl);
   renderSidebarDeals();
   setStatus("Ready");
 }
@@ -2396,6 +2400,8 @@ function renderNodeDealBadge(n) {
   });
 
   el.appendChild(container);
+  // Node height changed — refresh edges connected to this node
+  refreshNodeEdges(n.id);
 }
 
 /* ── Deal popover ────────────────────────────────────────────── */
