@@ -1608,12 +1608,12 @@ async function tryAutoLoad() {
     nodes = d.nodes||{}; edges = d.edges||[]; frames = d.frames||[];
     nidC = d.nidC||0; eidC = d.eidC||0; fidC = d.fidC||0;
     if (d.orgName) document.getElementById("org-picker-label").textContent = d.orgName;
-    // Populate sidebar org list from injected data (no API call needed)
+    // Populate sidebar org list from injected data.
+    // allOrgs and renderOrgList are declared later in the file — defer via setTimeout.
     if (d.allOrgs && d.allOrgs.length) {
-      allOrgs = d.allOrgs;
-      renderOrgList(allOrgs);
+      setTimeout(() => { allOrgs = d.allOrgs; renderOrgList(allOrgs); }, 0);
     } else {
-      document.getElementById("sb-org-list").innerHTML = '<div class="sb-deals-empty">No organisations</div>';
+      setTimeout(() => { document.getElementById("sb-org-list").innerHTML = '<div class="sb-deals-empty">No organisations</div>'; }, 0);
     }
     renderAll();
     setStatus(`Loaded: ${d.orgName||d.orgId||''}`);
@@ -1663,8 +1663,8 @@ async function tryAutoLoad() {
   }
 }
 await tryAutoLoad();
-// Load org list — only if we confirmed connection with Pipedrive
-if (companyId && isConnected) _loadOrgList();
+// Load org list — skip in standalone (already populated from payload in tryAutoLoad)
+if (companyId && isConnected && !window.__STANDALONE__) _loadOrgList();
 
 /* ── Render ──────────────────────────────────────────────────── */
 function renderAll() {
@@ -3171,10 +3171,11 @@ async function _exportPDF() {
     // Bounding box including frames
     const ns = Object.values(nodeData);
     const pad = 48;
+    const PDF_CARD_H = 85; // fixed card height (header 28 + body 57), no deal badge
     let minX = Math.min(...ns.map(n=>n.x));
     let minY = Math.min(...ns.map(n=>n.y));
     let maxX = Math.max(...ns.map(n=>n.x + n._w));
-    let maxY = Math.max(...ns.map(n=>n.y + n._h));
+    let maxY = Math.max(...ns.map(n=>n.y + PDF_CARD_H));
     (frames||[]).forEach(fr => {
       minX = Math.min(minX, fr.x); minY = Math.min(minY, fr.y);
       maxX = Math.max(maxX, fr.x+fr.w); maxY = Math.max(maxY, fr.y+fr.h);
@@ -3191,10 +3192,11 @@ async function _exportPDF() {
 
     // Edge geometry (pure coords, no DOM)
     function fp(n, side) {
-      if (side==='right')  return {x:n.x+n._w,      y:n.y+n._h/2,  side};
-      if (side==='left')   return {x:n.x,             y:n.y+n._h/2,  side};
-      if (side==='top')    return {x:n.x+n._w/2,     y:n.y,          side};
-                            return {x:n.x+n._w/2,     y:n.y+n._h,     side:'bottom'};
+      const nh = PDF_CARD_H; // use fixed card height, not live height with deal badge
+      if (side==='right')  return {x:n.x+n._w,    y:n.y+nh/2, side};
+      if (side==='left')   return {x:n.x,           y:n.y+nh/2, side};
+      if (side==='top')    return {x:n.x+n._w/2,   y:n.y,       side};
+                            return {x:n.x+n._w/2,   y:n.y+nh,    side:'bottom'};
     }
     function ep(e) {
       const f=nodeData[e.from], t=nodeData[e.to]; if(!f||!t) return '';
@@ -3243,11 +3245,15 @@ async function _exportPDF() {
     }).join('');
 
     // Nodes — pure SVG shapes, NO foreignObject (foreignObject taints canvas)
-    const NODE_R = 11;   // border-radius
-    const HEADER_H = 28; // node header height
-    const AV_R = 18;     // avatar radius
+    // Fixed card height for PDF: header(28) + body(57) = 85px regardless of deal badges
+    const HEADER_H = 28;
+    const BODY_H   = 57;  // 10px top pad + 36px avatar row + 11px bottom pad
+    const CARD_H   = HEADER_H + BODY_H;  // 85px fixed — ignores deal badge
+    const NODE_R   = 11;
+    const AV_R     = 18;
     const nodeSVG = Object.values(nodeData).map(n=>{
-      const nx=n.x-minX, ny=n.y-minY, nw=n._w, nh=n._h;
+      const nx=n.x-minX, ny=n.y-minY, nw=n._w;
+      const nh=CARD_H;  // always use fixed height, never the live _h which includes deal badges
       const ph=!!n.placeholder;
       const borderCol = ph ? '#9b6fe0' : '#d0d5e0';
       const bgCol     = ph ? '#f5f0fe' : '#ffffff';
@@ -3255,31 +3261,35 @@ async function _exportPDF() {
       const avFill1   = ph ? '#ede9fe' : '#dbeafe';
       const avFill2   = ph ? '#ddd6fe' : '#bfdbfe';
       const avText    = ph ? '#7c3aed' : '#1c64f2';
-      const av = ph ? '?' : xe(ini(n.name));
-      // Truncate text to fit
-      const maxNameChars = Math.floor((nw - 60) / 7);
-      const name  = xe(n.name  || '').slice(0, maxNameChars + 2);
-      const title = xe(n.title || '').slice(0, maxNameChars + 2);
-      const dept  = xe(n.dept  || '—').slice(0, maxNameChars + 4);
+      const av        = ph ? '?' : xe(ini(n.name));
+      // Text X anchor (avatar 36px wide + 10px left pad + 10px gap = x:56)
+      const tx = nx + 56;
+      // Available text width (card width minus text start minus right pad)
+      const textW = nw - 56 - 10;
       return `<g>
-  <!-- Card background + border -->
+  <defs>
+    <linearGradient id="av${n.id}" x1="0" y1="0" x2="1" y2="1">
+      <stop offset="0%" stop-color="${avFill1}"/>
+      <stop offset="100%" stop-color="${avFill2}"/>
+    </linearGradient>
+    <clipPath id="cc${n.id}"><rect x="${nx}" y="${ny}" width="${nw}" height="${nh}" rx="${NODE_R}"/></clipPath>
+    <clipPath id="ct${n.id}"><rect x="${tx}" y="${ny+HEADER_H+6}" width="${textW}" height="${BODY_H-8}"/></clipPath>
+  </defs>
+  <!-- Card shadow (subtle) -->
+  <rect x="${nx+1}" y="${ny+2}" width="${nw}" height="${nh}" rx="${NODE_R}" fill="rgba(0,0,0,0.06)"/>
+  <!-- Card body -->
   <rect x="${nx}" y="${ny}" width="${nw}" height="${nh}" rx="${NODE_R}" fill="${bgCol}" stroke="${borderCol}" stroke-width="1.5" ${ph?'stroke-dasharray="5 3"':''}/>
-  <!-- Header background -->
-  <clipPath id="ch${n.id}"><rect x="${nx}" y="${ny}" width="${nw}" height="${HEADER_H}" rx="${NODE_R}"/></clipPath>
-  <rect x="${nx}" y="${ny}" width="${nw}" height="${HEADER_H}" fill="${headerBg}" clip-path="url(#ch${n.id})"/>
-  <!-- Header bottom border -->
-  <line x1="${nx}" y1="${ny+HEADER_H}" x2="${nx+nw}" y2="${ny+HEADER_H}" stroke="${borderCol}" stroke-width="1"/>
-  <!-- Dept tag -->
-  <text x="${nx+10}" y="${ny+18}" font-family="monospace" font-size="8.5" font-weight="600" fill="#94a3b8" letter-spacing="0.5">${dept}</text>
-  <!-- Avatar circle -->
-  <defs><linearGradient id="av${n.id}" x1="0" y1="0" x2="1" y2="1"><stop offset="0%" stop-color="${avFill1}"/><stop offset="100%" stop-color="${avFill2}"/></linearGradient></defs>
-  <circle cx="${nx+22}" cy="${ny+HEADER_H+22}" r="${AV_R}" fill="url(#av${n.id})" stroke="${ph?'#9b6fe0':'rgba(28,100,242,0.2)'}" stroke-width="1.5" ${ph?'stroke-dasharray="3 2"':''}/>
-  <!-- Avatar initials -->
-  <text x="${nx+22}" y="${ny+HEADER_H+27}" text-anchor="middle" font-family="sans-serif" font-size="${ph?14:11}" font-weight="700" fill="${avText}">${av}</text>
-  <!-- Name -->
-  <text x="${nx+50}" y="${ny+HEADER_H+19}" font-family="sans-serif" font-size="11.5" font-weight="600" fill="#0f172a">${name}</text>
-  <!-- Title -->
-  <text x="${nx+50}" y="${ny+HEADER_H+34}" font-family="sans-serif" font-size="10.5" fill="#475569">${title}</text>
+  <!-- Header (clipped to card shape) -->
+  <rect x="${nx}" y="${ny}" width="${nw}" height="${HEADER_H}" fill="${headerBg}" clip-path="url(#cc${n.id})"/>
+  <line x1="${nx}" y1="${ny+HEADER_H}" x2="${nx+nw}" y2="${ny+HEADER_H}" stroke="${borderCol}" stroke-width="0.75"/>
+  <!-- Dept tag (clipped to header) -->
+  <text x="${nx+10}" y="${ny+18}" font-family="monospace" font-size="8" font-weight="600" fill="#94a3b8" letter-spacing="0.6" clip-path="url(#cc${n.id})">${xe(n.dept||'—')}</text>
+  <!-- Avatar -->
+  <circle cx="${nx+28}" cy="${ny+HEADER_H+BODY_H/2}" r="${AV_R}" fill="url(#av${n.id})" stroke="${ph?'#9b6fe0':'rgba(28,100,242,0.22)'}" stroke-width="1.5" ${ph?'stroke-dasharray="3 2"':''}/>
+  <text x="${nx+28}" y="${ny+HEADER_H+BODY_H/2+5}" text-anchor="middle" font-family="sans-serif" font-size="${ph?15:11}" font-weight="700" fill="${avText}">${av}</text>
+  <!-- Name + title (clipped so they never overflow card) -->
+  <text x="${tx}" y="${ny+HEADER_H+24}" font-family="sans-serif" font-size="12" font-weight="600" fill="#0f172a" clip-path="url(#ct${n.id})">${xe(n.name||'')}</text>
+  <text x="${tx}" y="${ny+HEADER_H+40}" font-family="sans-serif" font-size="10.5" fill="#475569" clip-path="url(#ct${n.id})">${xe(n.title||'')}</text>
 </g>`;
     }).join('');
 
@@ -3355,7 +3365,7 @@ function _openInNewWindow() {
     nidC, eidC, fidC,
     orgId, orgName, companyId, chartName,
     allOrgs,                                  // pre-load the org list
-    __base__: location.origin + (location.pathname.includes('/') ? location.pathname.replace(/\/[^\/]*$/, '') : '')
+    __base__: location.origin                 // real server origin for API calls
   };
 
   // Fetch this page's own HTML source, inject the payload, open in new tab.
