@@ -5,6 +5,8 @@
   <title>Org Chart Builder</title>
   <meta name="viewport" content="width=device-width, initial-scale=1" />
   <script src="https://cdn.jsdelivr.net/npm/@pipedrive/app-extensions-sdk@0/dist/index.umd.js"></script>
+  <script src="https://cdnjs.cloudflare.com/ajax/libs/html2canvas/1.4.1/html2canvas.min.js"></script>
+  <script src="https://cdnjs.cloudflare.com/ajax/libs/jspdf/2.5.1/jspdf.umd.min.js"></script>
   <script>
     // Make Command available globally from the UMD build
     const Command = window.AppExtensionsSDK?.Command || { RESIZE: "resize" };
@@ -1116,6 +1118,18 @@
     Save
   </button>
 
+  <div class="tl-sep"></div>
+
+  <button class="tl-btn" onclick="exportPDF()" title="Download as PDF">
+    <svg viewBox="0 0 24 24"><path d="M14 2H6a2 2 0 00-2 2v16a2 2 0 002 2h12a2 2 0 002-2V8z"/><polyline points="14 2 14 8 20 8"/><line x1="12" y1="18" x2="12" y2="12"/><line x1="9" y1="15" x2="15" y2="15"/></svg>
+    PDF
+  </button>
+
+  <button class="tl-btn" onclick="openInNewWindow()" title="Open chart in new tab">
+    <svg viewBox="0 0 24 24"><path d="M18 13v6a2 2 0 01-2 2H5a2 2 0 01-2-2V8a2 2 0 012-2h6"/><polyline points="15 3 21 3 21 9"/><line x1="10" y1="14" x2="21" y2="3"/></svg>
+    Open
+  </button>
+
   <div class="tl-spacer"></div>
 
   <div class="tl-status">
@@ -1520,6 +1534,8 @@ window.setEdgeShape      = function(s) { _setEdgeShape(s); };
 window.setEdgeDash       = function(s) { _setEdgeDash(s); };
 window.setEdgeArrow      = function(s) { _setEdgeArrow(s); };
 window.setEdgeColor      = function(c) { _setEdgeColor(c); };
+window.exportPDF         = function() { _exportPDF(); };
+window.openInNewWindow   = function() { _openInNewWindow(); };
 
 
 /* ── Transform helpers ───────────────────────────────────────── */
@@ -3100,6 +3116,255 @@ document.addEventListener("keyup", e=>{
 function setStatus(msg, warn=false) {
   statusTxt.textContent = msg;
   statusDot.classList.toggle("warn", warn);
+}
+
+/* ── PDF Export ──────────────────────────────────────────────── */
+async function _exportPDF() {
+  if (!Object.keys(nodes).length) { setStatus("Nothing to export", true); return; }
+  setStatus("Generating PDF…");
+  try {
+    // Temporarily reset transform so we capture full chart at 1:1
+    const savedZoom = zoom, savedPanX = panX, savedPanY = panY;
+    // Fit everything to 1:1 with a small pad
+    const ns = Object.values(nodes);
+    const pad = 40;
+    const minX = Math.min(...ns.map(n=>n.x)) - pad;
+    const minY = Math.min(...ns.map(n=>n.y)) - pad;
+    const maxX = Math.max(...ns.map(n=>n.x + nodeW(n))) + pad;
+    const maxY = Math.max(...ns.map(n=>n.y + nodeH(n))) + pad;
+    // Set pan so top-left of chart aligns to canvas origin
+    zoom = 1; panX = -minX; panY = -minY;
+    applyTransform();
+    await new Promise(r => requestAnimationFrame(() => requestAnimationFrame(r)));
+
+    const chartW = maxX - minX;
+    const chartH = maxY - minY;
+
+    // Capture canvas at 2× for crisp PDF
+    const canvas = await html2canvas(canvasEl, {
+      scale: 2,
+      useCORS: true,
+      backgroundColor: '#eef0f4',
+      width:  chartW,
+      height: chartH,
+      windowWidth:  chartW,
+      windowHeight: chartH,
+      scrollX: 0,
+      scrollY: 0,
+    });
+
+    // Restore transform
+    zoom = savedZoom; panX = savedPanX; panY = savedPanY;
+    applyTransform();
+
+    const { jsPDF } = window.jspdf;
+    const imgData = canvas.toDataURL('image/png');
+    // Choose orientation based on aspect ratio
+    const landscape = chartW > chartH;
+    const pdf = new jsPDF({ orientation: landscape ? 'l' : 'p', unit: 'px', format: [chartW, chartH] });
+    pdf.addImage(imgData, 'PNG', 0, 0, chartW, chartH);
+    const chartName = document.getElementById('chart-name-input').value || 'OrgChart';
+    pdf.save(`${chartName}.pdf`);
+    setStatus("PDF downloaded");
+  } catch(e) {
+    console.error('PDF export error:', e);
+    setStatus("PDF export failed", true);
+  }
+}
+
+/* ── Open in new window ──────────────────────────────────────── */
+function _openInNewWindow() {
+  if (!Object.keys(nodes).length) { setStatus("Nothing to open", true); return; }
+
+  const chartName = document.getElementById('chart-name-input').value || 'Org Chart';
+
+  // Snapshot current node sizes (needed for accurate edge geometry)
+  const nodeData = Object.fromEntries(Object.entries(nodes).map(([id, n]) => {
+    const el = document.getElementById('nd-' + id);
+    return [id, { ...n, _w: el?.offsetWidth||200, _h: el?.offsetHeight||100 }];
+  }));
+
+  const EDGE_COLORS = {
+    default:{ stroke:"#b0bac8" }, blue:{ stroke:"#1c64f2" }, green:{ stroke:"#16a34a" },
+    red:{ stroke:"#e02424" }, orange:{ stroke:"#d97706" }, purple:{ stroke:"#7c3aed" },
+    teal:{ stroke:"#0891b2" }, pink:{ stroke:"#db2777" }
+  };
+
+  // Compute bounding box
+  const ns = Object.values(nodeData);
+  const pad = 60;
+  const minX = Math.min(...ns.map(n=>n.x)) - pad;
+  const minY = Math.min(...ns.map(n=>n.y)) - pad;
+  const maxX = Math.max(...ns.map(n=>n.x + n._w)) + pad;
+  const maxY = Math.max(...ns.map(n=>n.y + n._h)) + pad;
+  const W = maxX - minX, H = maxY - minY;
+
+  // Edge geometry helpers (self-contained copy)
+  function fixedPortSA(n, side) {
+    const nw=n._w, nh=n._h;
+    if (side==="right")  return { x:n.x+nw,   y:n.y+nh/2, side };
+    if (side==="left")   return { x:n.x,        y:n.y+nh/2, side };
+    if (side==="top")    return { x:n.x+nw/2,  y:n.y,       side };
+                          return { x:n.x+nw/2,  y:n.y+nh,    side:"bottom" };
+  }
+  function edgePathSA(e) {
+    const f = nodeData[e.from], t = nodeData[e.to];
+    if (!f || !t) return '';
+    const src = fixedPortSA(f, e.fromSide||'bottom');
+    const dst = fixedPortSA(t, e.toSide||'top');
+    const x1=src.x-minX, y1=src.y-minY, x2=dst.x-minX, y2=dst.y-minY;
+    const shape = e.shape||'curved';
+    if (shape==='straight') return `M${x1},${y1} L${x2},${y2}`;
+    if (shape==='elbow') {
+      const ss=src.side, ds=dst.side;
+      if ((ss==='bottom'||ss==='top')&&(ds==='bottom'||ds==='top')) { const my=(y1+y2)/2; return `M${x1},${y1} L${x1},${my} L${x2},${my} L${x2},${y2}`; }
+      if ((ss==='left'||ss==='right')&&(ds==='left'||ds==='right')) { const mx=(x1+x2)/2; return `M${x1},${y1} L${mx},${y1} L${mx},${y2} L${x2},${y2}`; }
+      if (ss==='bottom'||ss==='top') return `M${x1},${y1} L${x1},${y2} L${x2},${y2}`;
+      return `M${x1},${y1} L${x2},${y1} L${x2},${y2}`;
+    }
+    // curved
+    const dist=Math.max(Math.abs(x2-x1),Math.abs(y2-y1));
+    const pull=Math.min(Math.max(dist*0.45,40),150);
+    const oD={right:[1,0],left:[-1,0],bottom:[0,1],top:[0,-1]};
+    const iD={left:[-1,0],right:[1,0],top:[0,-1],bottom:[0,1]};
+    const [odx,ody]=oD[src.side]; const [idx2,idy]=iD[dst.side];
+    return `M${x1},${y1} C${x1+odx*pull},${y1+ody*pull} ${x2+idx2*pull},${y2+idy*pull} ${x2},${y2}`;
+  }
+
+  function initials(name) {
+    const p = (name||'').trim().split(/\s+/);
+    if (p.length>=2) return (p[0][0]+(p[p.length-1][0]||'')).toUpperCase();
+    return (name||'?').slice(0,2).toUpperCase();
+  }
+  function esc(s) { return String(s||'').replace(/&/g,'&amp;').replace(/</g,'&lt;').replace(/>/g,'&gt;').replace(/"/g,'&quot;'); }
+
+  // Build SVG defs for arrowhead markers
+  const markerColors = {
+    '#b0bac8':'grey','#1c64f2':'blue','#16a34a':'green','#e02424':'red',
+    '#d97706':'orange','#7c3aed':'purple','#0891b2':'teal','#db2777':'pink'
+  };
+  const markerDefs = Object.entries(EDGE_COLORS).map(([k,v]) =>
+    `<marker id="arr-${k}" markerWidth="10" markerHeight="8" refX="10" refY="4" orient="auto" markerUnits="userSpaceOnUse"><polygon points="0 0,10 4,0 8" fill="${v.stroke}"/></marker>
+     <marker id="arr-s-${k}" markerWidth="10" markerHeight="8" refX="0" refY="4" orient="auto-start-reverse" markerUnits="userSpaceOnUse"><polygon points="0 0,10 4,0 8" fill="${v.stroke}"/></marker>`
+  ).join('\n');
+
+  // Build SVG edges
+  const edgeSvg = edges.map(e => {
+    const d = edgePathSA(e);
+    if (!d) return '';
+    const col = (EDGE_COLORS[e.color]||EDGE_COLORS.default).stroke;
+    const ckey = e.color||'default';
+    const dashAttr = e.dash==='dashed' ? 'stroke-dasharray="8 4"' : e.dash==='dotted' ? 'stroke-dasharray="2 4"' : '';
+    const markerEnd   = (e.arrow==='end'||e.arrow==='both')  ? `marker-end="url(#arr-${ckey})"` : '';
+    const markerStart = (e.arrow==='both') ? `marker-start="url(#arr-s-${ckey})"` : '';
+    return `<path d="${d}" fill="none" stroke="${col}" stroke-width="2" stroke-linecap="round" ${dashAttr} ${markerEnd} ${markerStart}/>`;
+  }).join('\n');
+
+  // Build SVG frames
+  const frameColors = {
+    blue:  {border:'#1c64f2',bg:'rgba(28,100,242,0.07)',text:'#1c64f2'},
+    green: {border:'#16a34a',bg:'rgba(22,163,74,0.07)',text:'#16a34a'},
+    purple:{border:'#7c3aed',bg:'rgba(124,58,237,0.07)',text:'#7c3aed'},
+    orange:{border:'#d97706',bg:'rgba(217,119,6,0.07)',text:'#d97706'},
+    red:   {border:'#e02424',bg:'rgba(224,36,36,0.07)',text:'#e02424'},
+    grey:  {border:'#94a3b8',bg:'rgba(148,163,184,0.07)',text:'#64748b'},
+  };
+  const frameSvg = (frames||[]).map(fr => {
+    const fc = frameColors[fr.color]||frameColors.grey;
+    const fx=fr.x-minX, fy=fr.y-minY;
+    return `<rect x="${fx}" y="${fy}" width="${fr.w}" height="${fr.h}" rx="10"
+      fill="${fc.bg}" stroke="${fc.border}" stroke-width="2"/>
+    <text x="${fx+12}" y="${fy+20}" font-family="system-ui,sans-serif" font-size="11"
+      font-weight="700" fill="${fc.text}" text-transform="uppercase" letter-spacing="1">${esc(fr.label||'')}</text>`;
+  }).join('\n');
+
+  // Build HTML nodes (foreignObject for rich text in SVG)
+  const nodeFO = Object.values(nodeData).map(n => {
+    const nx=n.x-minX, ny=n.y-minY;
+    const nw=n._w, nh=n._h;
+    const isPlaceholder = !!n.placeholder;
+    const av = initials(n.name);
+    const borderColor = isPlaceholder ? 'rgba(124,58,237,0.4)' : '#e2e5eb';
+    const borderStyle = isPlaceholder ? 'dashed' : 'solid';
+    const bgColor     = isPlaceholder ? 'rgba(124,58,237,0.06)' : '#ffffff';
+    const avBg        = isPlaceholder ? 'linear-gradient(135deg,#ede9fe,#ddd6fe)' : 'linear-gradient(135deg,#dbeafe,#bfdbfe)';
+    const avColor     = isPlaceholder ? '#7c3aed' : '#1c64f2';
+    return `<foreignObject x="${nx}" y="${ny}" width="${nw}" height="${nh}">
+  <div xmlns="http://www.w3.org/1999/xhtml" style="
+    width:${nw}px;height:${nh}px;box-sizing:border-box;
+    background:${bgColor};border:1.5px ${borderStyle} ${borderColor};
+    border-radius:11px;font-family:'DM Sans',system-ui,sans-serif;
+    box-shadow:0 1px 3px rgba(0,0,0,.07),0 4px 16px rgba(0,0,0,.05);
+    overflow:hidden;display:flex;flex-direction:column;">
+    <div style="display:flex;align-items:center;gap:6px;padding:7px 10px 6px;
+      border-bottom:1px solid #e2e5eb;background:#f6f7f9;flex-shrink:0;">
+      <span style="flex:1;font-size:9px;font-weight:600;text-transform:uppercase;
+        letter-spacing:0.07em;color:#94a3b8;white-space:nowrap;overflow:hidden;text-overflow:ellipsis;">
+        ${esc(n.dept||'—')}</span>
+    </div>
+    <div style="padding:10px 12px 11px;display:flex;align-items:center;gap:10px;flex:1;">
+      <div style="width:36px;height:36px;border-radius:50%;background:${avBg};
+        border:1.5px ${isPlaceholder?'dashed':'solid'} ${isPlaceholder?'rgba(124,58,237,0.4)':'rgba(28,100,242,0.18)'};
+        display:flex;align-items:center;justify-content:center;
+        font-size:${isPlaceholder?'15':'12'}px;font-weight:700;color:${avColor};flex-shrink:0;">
+        ${isPlaceholder?'?':esc(av)}</div>
+      <div style="flex:1;min-width:0;">
+        <div style="font-size:12px;font-weight:600;color:#0f172a;line-height:1.3;margin-bottom:2px;
+          overflow:hidden;text-overflow:ellipsis;white-space:nowrap;">${esc(n.name)}</div>
+        <div style="font-size:11px;color:#475569;line-height:1.3;overflow:hidden;text-overflow:ellipsis;white-space:nowrap;">${esc(n.title||'')}</div>
+      </div>
+    </div>
+  </div>
+</foreignObject>`;
+  }).join('\n');
+
+  const html = `<!doctype html>
+<html lang="en">
+<head>
+<meta charset="utf-8"/>
+<title>${esc(chartName)}</title>
+<link href="https://fonts.googleapis.com/css2?family=DM+Sans:wght@400;500;600&display=swap" rel="stylesheet"/>
+<style>
+  *{box-sizing:border-box;margin:0;padding:0}
+  body{font-family:'DM Sans',system-ui,sans-serif;background:#eef0f4;min-height:100vh;display:flex;flex-direction:column;}
+  header{background:#fff;border-bottom:1px solid #e2e5eb;padding:12px 20px;display:flex;align-items:center;gap:12px;flex-shrink:0;}
+  header h1{font-size:15px;font-weight:600;color:#0f172a;flex:1;}
+  header span{font-size:12px;color:#94a3b8;}
+  .btn{padding:7px 14px;border-radius:7px;border:1px solid #e2e5eb;background:#fff;
+    font-size:12px;font-weight:500;color:#475569;cursor:pointer;display:flex;align-items:center;gap:6px;text-decoration:none;}
+  .btn:hover{background:#f6f7f9;border-color:#c8cdd8;}
+  .canvas-area{flex:1;overflow:auto;padding:24px;display:flex;justify-content:center;align-items:flex-start;}
+  svg{display:block;filter:drop-shadow(0 2px 8px rgba(0,0,0,.06));}
+</style>
+</head>
+<body>
+<header>
+  <svg viewBox="0 0 24 24" width="20" height="20" fill="none" stroke="#1c64f2" stroke-width="2" stroke-linecap="round" stroke-linejoin="round">
+    <rect x="8" y="1" width="8" height="6" rx="1"/><rect x="1" y="16" width="7" height="6" rx="1"/><rect x="16" y="16" width="7" height="6" rx="1"/>
+    <line x1="12" y1="7" x2="12" y2="12"/><line x1="12" y1="12" x2="4.5" y2="16"/><line x1="12" y1="12" x2="19.5" y2="16"/>
+  </svg>
+  <h1>${esc(chartName)}</h1>
+  <span>${new Date().toLocaleDateString()}</span>
+</header>
+<div class="canvas-area">
+<svg xmlns="http://www.w3.org/2000/svg" width="${W}" height="${H}" viewBox="0 0 ${W} ${H}">
+  <defs>${markerDefs}</defs>
+  <rect width="${W}" height="${H}" fill="#eef0f4" rx="12"/>
+  <!-- Frames (behind edges and nodes) -->
+  ${frameSvg}
+  <!-- Edges -->
+  ${edgeSvg}
+  <!-- Nodes (foreignObject with HTML) -->
+  ${nodeFO}
+</svg>
+</div>
+</body>
+</html>`;
+
+  const blob = new Blob([html], {type: 'text/html'});
+  const url  = URL.createObjectURL(blob);
+  window.open(url, '_blank');
+  setStatus('Opened in new tab');
 }
 
 /* ── Modal drag-resize ───────────────────────────────────────── */
