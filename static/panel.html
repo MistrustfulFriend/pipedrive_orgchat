@@ -1503,6 +1503,10 @@ let selectedEdgeId = null;
 // Zoom / pan — stored as a transform applied to BOTH the nodes-layer
 // and the SVG <g> so coordinates always stay in sync.
 let zoom = 1.0, panX = 0, panY = 0;
+// Declared here (not later) so renderAll() can safely reference them
+// even when called early (e.g. from tryAutoLoad in standalone mode).
+const dealsCache   = {};
+const FRAME_COLORS = ["blue","green","purple","orange","red","teal","pink","grey"];
 
 const canvasEl  = document.getElementById("canvas-wrap");
 const nodesEl   = document.getElementById("nodes-layer");
@@ -2256,7 +2260,6 @@ function _deleteEdge(eid) {
 }
 
 /* ── Department Frames ───────────────────────────────────────── */
-const FRAME_COLORS = ["blue","green","purple","orange","red","teal","pink","grey"];
 let frameDragging = null;
 
 function _addFrame() {
@@ -2749,7 +2752,6 @@ document.addEventListener("click", e => {
 
 /* ── Deals ───────────────────────────────────────────────────── */
 // Cache: pdPersonId → {deals: [...], ts: timestamp}
-const dealsCache = {};
 // All fetched deals indexed by pdPersonId for sidebar
 let allPersonDeals = {};
 
