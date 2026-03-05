@@ -1397,6 +1397,14 @@
 <script>
 (async () => {
 
+/* ── API base URL (works from blob: URLs in standalone window) ── */
+// When opened as a standalone blob, relative /api/ paths don't resolve.
+// __SA_BASE__ is injected by _openInNewWindow so all fetches hit the real server.
+function apiFetch(path, opts) {
+  const base = (window.__STANDALONE__ && window.__STANDALONE__.__base__) ? window.__STANDALONE__.__base__ : '';
+  return fetch(base + path, opts);
+}
+
 /* ── SDK + URL params ─────────────────────────────────────────── */
 // Pipedrive appends its session token as ?id= — that is NOT the org ID, never use it.
 const _p      = new URLSearchParams(location.search);
@@ -1470,7 +1478,7 @@ if (__SA__) {
 } else if (!companyId) {
   document.getElementById("connect-screen").classList.add("show");
 } else {
-  const s = await fetch(`/api/status?companyId=${companyId}`)
+  const s = await apiFetch(`/api/status?companyId=${companyId}`)
     .then(r => r.json()).catch(() => ({ connected: false }));
   isConnected = !!s.connected;
   if (!isConnected) document.getElementById("connect-screen").classList.add("show");
@@ -1600,6 +1608,13 @@ async function tryAutoLoad() {
     nodes = d.nodes||{}; edges = d.edges||[]; frames = d.frames||[];
     nidC = d.nidC||0; eidC = d.eidC||0; fidC = d.fidC||0;
     if (d.orgName) document.getElementById("org-picker-label").textContent = d.orgName;
+    // Populate sidebar org list from injected data (no API call needed)
+    if (d.allOrgs && d.allOrgs.length) {
+      allOrgs = d.allOrgs;
+      renderOrgList(allOrgs);
+    } else {
+      document.getElementById("sb-org-list").innerHTML = '<div class="sb-deals-empty">No organisations</div>';
+    }
     renderAll();
     setStatus(`Loaded: ${d.orgName||d.orgId||''}`);
     return;
@@ -1610,7 +1625,7 @@ async function tryAutoLoad() {
   if (orgId) {
     if (!orgName) {
       try {
-        const r = await fetch(`/api/org/by-id?orgId=${orgId}&companyId=${companyId}`).then(x=>x.json());
+        const r = await apiFetch(`/api/org/by-id?orgId=${orgId}&companyId=${companyId}`).then(x=>x.json());
         if (r.org?.name) orgName = r.org.name;
       } catch(e) {}
     }
@@ -1632,7 +1647,7 @@ async function tryAutoLoad() {
 
   if (candidate.length > 1) {
     try {
-      const r = await fetch(`/api/orgs/search?q=${encodeURIComponent(candidate)}&companyId=${companyId}`).then(x=>x.json());
+      const r = await apiFetch(`/api/orgs/search?q=${encodeURIComponent(candidate)}&companyId=${companyId}`).then(x=>x.json());
       const orgs = r.orgs || [];
       // Exact or case-insensitive match wins; otherwise pick first result
       const exact = orgs.find(o => o.name.toLowerCase() === candidate.toLowerCase());
@@ -2592,7 +2607,7 @@ async function doPsSearch(q) {
   const el = document.getElementById("ps-results");
   if (!companyId) { el.innerHTML=`<div class="sr-msg">Not connected to Pipedrive</div>`; return; }
   try {
-    const resp = await fetch(`/api/orgchart/search?q=${encodeURIComponent(q)}&companyId=${encodeURIComponent(companyId)}`);
+    const resp = await apiFetch(`/api/orgchart/search?q=${encodeURIComponent(q)}&companyId=${encodeURIComponent(companyId)}`);
     if (!resp.ok) { el.innerHTML=`<div class="sr-msg">Error ${resp.status}</div>`; return; }
     const d = await resp.json();
     if (d.error) { el.innerHTML=`<div class="sr-msg">${escHtml(d.error)}</div>`; return; }
@@ -2646,7 +2661,7 @@ async function doOrgSearch(q) {
   const el = document.getElementById("org-dd-list");
   if (!companyId) { el.innerHTML=`<div class="org-dd-empty">Not connected</div>`; return; }
   try {
-    const resp = await fetch(`/api/orgs/search?q=${encodeURIComponent(q)}&companyId=${encodeURIComponent(companyId)}`);
+    const resp = await apiFetch(`/api/orgs/search?q=${encodeURIComponent(q)}&companyId=${encodeURIComponent(companyId)}`);
     if (!resp.ok) { el.innerHTML=`<div class="org-dd-empty">Error ${resp.status}</div>`; return; }
     const d = await resp.json();
     if (d.error) { el.innerHTML=`<div class="org-dd-empty">${escHtml(d.error)}</div>`; return; }
@@ -2679,7 +2694,7 @@ async function doSave() {
   if (!orgId) { setStatus("Select an organisation first"); return; }
   statusDot.classList.add("warn"); setStatus("Saving…");
   try {
-    const r = await fetch("/api/orgchart/save", {
+    const r = await apiFetch("/api/orgchart/save", {
       method: "POST",
       headers: {"Content-Type":"application/json"},
       body: JSON.stringify({
@@ -2702,7 +2717,7 @@ async function loadChart() {
   nodes = {}; edges = []; frames = []; nidC = 0; eidC = 0; fidC = 0;
   renderAll();
   try {
-    const d = await fetch(`/api/orgchart/load?orgId=${orgId}&companyId=${companyId}`).then(r=>r.json());
+    const d = await apiFetch(`/api/orgchart/load?orgId=${orgId}&companyId=${companyId}`).then(r=>r.json());
     if (d.chart) {
       const c = JSON.parse(d.chart);
       nodes = c.nodes||{}; edges = c.edges||[]; frames = c.frames||[]; nidC = c.nidC||0; eidC = c.eidC||0; fidC = c.fidC||0;
@@ -2760,7 +2775,7 @@ async function fetchPersonDeals(pdPersonId) {
   const cached = dealsCache[pdPersonId];
   if (cached && Date.now() - cached.ts < 60000) return cached.deals; // 1 min TTL
   try {
-    const d = await fetch(`/api/person/deals?personId=${pdPersonId}&companyId=${companyId}`)
+    const d = await apiFetch(`/api/person/deals?personId=${pdPersonId}&companyId=${companyId}`)
       .then(r => r.json());
     const deals = d.deals || [];
     dealsCache[pdPersonId] = { deals, ts: Date.now() };
@@ -2954,7 +2969,7 @@ async function _loadOrgList() {
   }
   el.innerHTML = '<div class="sb-deals-empty">Loading…</div>';
   try {
-    const resp = await fetch(`/api/orgs/list?companyId=${encodeURIComponent(companyId)}&limit=100`);
+    const resp = await apiFetch(`/api/orgs/list?companyId=${encodeURIComponent(companyId)}&limit=100`);
     if (!resp.ok) {
       el.innerHTML = `<div class="sb-deals-empty">Error ${resp.status} — <span style="color:var(--blue);cursor:pointer" onclick="loadOrgList()">retry</span></div>`;
       console.error("orgs/list HTTP error:", resp.status);
@@ -2967,7 +2982,7 @@ async function _loadOrgList() {
     }
     allOrgs = r.orgs || [];
     if (r.more) {
-      const r2 = await fetch(`/api/orgs/list?companyId=${encodeURIComponent(companyId)}&limit=100&start=100`).then(x=>x.json()).catch(()=>({orgs:[]}));
+      const r2 = await apiFetch(`/api/orgs/list?companyId=${encodeURIComponent(companyId)}&limit=100&start=100`).then(x=>x.json()).catch(()=>({orgs:[]}));
       allOrgs = allOrgs.concat(r2.orgs || []);
     }
     if (!allOrgs.length) {
@@ -3020,7 +3035,7 @@ async function syncPersonNameToPD(nodeId, newName) {
   const n = nodes[nodeId];
   if (!n || !n.pdPersonId || !companyId) return;
   try {
-    const r = await fetch(`/api/person/update-name`, {
+    const r = await apiFetch(`/api/person/update-name`, {
       method: "POST",
       headers: { "Content-Type": "application/json" },
       body: JSON.stringify({ personId: n.pdPersonId, name: newName, companyId })
@@ -3041,7 +3056,7 @@ async function refreshPersonNamesFromPD() {
   let changed = false;
   await Promise.all(linked.map(async n => {
     try {
-      const r = await fetch(`/api/person/info?personId=${n.pdPersonId}&companyId=${companyId}`).then(x=>x.json());
+      const r = await apiFetch(`/api/person/info?personId=${n.pdPersonId}&companyId=${companyId}`).then(x=>x.json());
       if (r.person) {
         if (r.person.name  && r.person.name  !== n.name)  { nodes[n.id].name  = r.person.name;  changed = true; }
         if (r.person.title !== undefined && r.person.title !== n.title) { nodes[n.id].title = r.person.title; changed = true; }
@@ -3147,14 +3162,14 @@ async function _exportPDF() {
     const chartName = document.getElementById('chart-name-input').value || 'Org Chart';
     const currentOrgName = orgName || document.getElementById('org-picker-label').textContent || '';
 
-    // ── Collect node sizes from live DOM ──────────────────────────
+    // Collect live node sizes
     const nodeData = Object.fromEntries(Object.entries(nodes).map(([id, n]) => {
       const el = document.getElementById('nd-' + id);
       return [id, { ...n, _w: el?.offsetWidth||200, _h: el?.offsetHeight||100 }];
     }));
 
-    // ── Bounding box (include frames) ─────────────────────────────
-    const ns  = Object.values(nodeData);
+    // Bounding box including frames
+    const ns = Object.values(nodeData);
     const pad = 48;
     let minX = Math.min(...ns.map(n=>n.x));
     let minY = Math.min(...ns.map(n=>n.y));
@@ -3167,116 +3182,125 @@ async function _exportPDF() {
     minX -= pad; minY -= pad; maxX += pad; maxY += pad;
     const W = maxX - minX, H = maxY - minY;
 
-    // ── Self-contained edge geometry ──────────────────────────────
+    // Colour palettes
     const EC = {
       default:'#b0bac8', blue:'#1c64f2', green:'#16a34a', red:'#e02424',
       orange:'#d97706', purple:'#7c3aed', teal:'#0891b2', pink:'#db2777'
     };
-    function fpdf(n, side) {
-      const nw=n._w, nh=n._h;
-      if (side==='right')  return {x:n.x+nw,    y:n.y+nh/2, side};
-      if (side==='left')   return {x:n.x,         y:n.y+nh/2, side};
-      if (side==='top')    return {x:n.x+nw/2,   y:n.y,       side};
-                            return {x:n.x+nw/2,   y:n.y+nh,    side:'bottom'};
+    const fCols = { blue:'#1c64f2', green:'#16a34a', purple:'#7c3aed', orange:'#d97706', red:'#e02424', grey:'#94a3b8' };
+
+    // Edge geometry (pure coords, no DOM)
+    function fp(n, side) {
+      if (side==='right')  return {x:n.x+n._w,      y:n.y+n._h/2,  side};
+      if (side==='left')   return {x:n.x,             y:n.y+n._h/2,  side};
+      if (side==='top')    return {x:n.x+n._w/2,     y:n.y,          side};
+                            return {x:n.x+n._w/2,     y:n.y+n._h,     side:'bottom'};
     }
-    function epdf(e) {
+    function ep(e) {
       const f=nodeData[e.from], t=nodeData[e.to]; if(!f||!t) return '';
-      const src=fpdf(f, e.fromSide||'bottom'), dst=fpdf(t, e.toSide||'top');
+      const src=fp(f,e.fromSide||'bottom'), dst=fp(t,e.toSide||'top');
       const x1=src.x-minX, y1=src.y-minY, x2=dst.x-minX, y2=dst.y-minY;
-      const shape=e.shape||'curved';
-      if (shape==='straight') return `M${x1},${y1} L${x2},${y2}`;
-      if (shape==='elbow') {
+      if ((e.shape||'curved')==='straight') return `M${x1},${y1} L${x2},${y2}`;
+      if ((e.shape||'curved')==='elbow') {
         const ss=src.side, ds=dst.side;
         if ((ss==='bottom'||ss==='top')&&(ds==='bottom'||ds==='top')){const my=(y1+y2)/2;return `M${x1},${y1} L${x1},${my} L${x2},${my} L${x2},${y2}`;}
         if ((ss==='left'||ss==='right')&&(ds==='left'||ds==='right')){const mx=(x1+x2)/2;return `M${x1},${y1} L${mx},${y1} L${mx},${y2} L${x2},${y2}`;}
-        if (ss==='bottom'||ss==='top') return `M${x1},${y1} L${x1},${y2} L${x2},${y2}`;
-        return `M${x1},${y1} L${x2},${y1} L${x2},${y2}`;
+        return (ss==='bottom'||ss==='top') ? `M${x1},${y1} L${x1},${y2} L${x2},${y2}` : `M${x1},${y1} L${x2},${y1} L${x2},${y2}`;
       }
       const dist=Math.max(Math.abs(x2-x1),Math.abs(y2-y1));
       const pull=Math.min(Math.max(dist*0.45,40),150);
       const oD={right:[1,0],left:[-1,0],bottom:[0,1],top:[0,-1]};
       const iD={left:[-1,0],right:[1,0],top:[0,-1],bottom:[0,1]};
-      const [odx,ody]=oD[src.side]; const [idx,idy]=iD[dst.side];
+      const [odx,ody]=oD[src.side],[idx,idy]=iD[dst.side];
       return `M${x1},${y1} C${x1+odx*pull},${y1+ody*pull} ${x2+idx*pull},${y2+idy*pull} ${x2},${y2}`;
     }
     function ini(name){const p=(name||'').trim().split(/\s+/);return p.length>=2?(p[0][0]+(p[p.length-1][0]||'')).toUpperCase():(name||'?').slice(0,2).toUpperCase();}
-    function esc(s){return String(s||'').replace(/&/g,'&amp;').replace(/</g,'&lt;').replace(/>/g,'&gt;').replace(/"/g,'&quot;');}
+    function xe(s){return String(s||'').replace(/&/g,'&amp;').replace(/</g,'&lt;').replace(/>/g,'&gt;').replace(/"/g,'&quot;');}
 
-    // ── SVG marker defs ───────────────────────────────────────────
+    // Arrow markers
     const defs = Object.entries(EC).map(([k,v])=>
-      `<marker id="p${k}" markerWidth="10" markerHeight="8" refX="10" refY="4" orient="auto" markerUnits="userSpaceOnUse"><polygon points="0 0,10 4,0 8" fill="${v}"/></marker>
-       <marker id="ps${k}" markerWidth="10" markerHeight="8" refX="0" refY="4" orient="auto-start-reverse" markerUnits="userSpaceOnUse"><polygon points="0 0,10 4,0 8" fill="${v}"/></marker>`
+      `<marker id="m${k}" markerWidth="10" markerHeight="8" refX="10" refY="4" orient="auto" markerUnits="userSpaceOnUse"><polygon points="0 0,10 4,0 8" fill="${v}"/></marker>
+       <marker id="ms${k}" markerWidth="10" markerHeight="8" refX="0" refY="4" orient="auto-start-reverse" markerUnits="userSpaceOnUse"><polygon points="0 0,10 4,0 8" fill="${v}"/></marker>`
     ).join('');
 
-    // ── Frame SVG ─────────────────────────────────────────────────
-    const fCols = {blue:'#1c64f2',green:'#16a34a',purple:'#7c3aed',orange:'#d97706',red:'#e02424',grey:'#94a3b8'};
+    // Frames
     const frameSVG = (frames||[]).map(fr=>{
-      const c=fCols[fr.color]||fCols.grey;
-      const bg=c+'12';
-      return `<rect x="${fr.x-minX}" y="${fr.y-minY}" width="${fr.w}" height="${fr.h}" rx="10" fill="${bg}" stroke="${c}" stroke-width="2"/>
-      <text x="${fr.x-minX+12}" y="${fr.y-minY+20}" font-family="DM Mono,monospace" font-size="11" font-weight="700" fill="${c}" letter-spacing="1">${esc((fr.label||'').toUpperCase())}</text>`;
+      const c = fCols[fr.color]||fCols.grey;
+      const fx=fr.x-minX, fy=fr.y-minY;
+      const label = (fr.label||'').toUpperCase();
+      return `<rect x="${fx}" y="${fy}" width="${fr.w}" height="${fr.h}" rx="10" fill="${c}1a" stroke="${c}" stroke-width="2"/>
+<text x="${fx+14}" y="${fy+21}" font-family="monospace" font-size="11" font-weight="700" fill="${c}" letter-spacing="1">${xe(label)}</text>`;
     }).join('');
 
-    // ── Edge SVG ──────────────────────────────────────────────────
+    // Edges
     const edgeSVG = edges.map(e=>{
-      const d=epdf(e); if(!d) return '';
-      const col=EC[e.color]||EC.default;
-      const ckey=e.color||'default';
+      const d=ep(e); if(!d) return '';
+      const col=EC[e.color]||EC.default, ckey=e.color||'default';
       const dash=e.dash==='dashed'?'stroke-dasharray="8 4"':e.dash==='dotted'?'stroke-dasharray="2 4"':'';
-      const me=(e.arrow==='end'||e.arrow==='both')?`marker-end="url(#p${ckey})"`:'' ;
-      const ms=e.arrow==='both'?`marker-start="url(#ps${ckey})"`:'' ;
+      const me=(e.arrow==='end'||e.arrow==='both')?`marker-end="url(#m${ckey})"`:'' ;
+      const ms=e.arrow==='both'?`marker-start="url(#ms${ckey})"`:'' ;
       return `<path d="${d}" fill="none" stroke="${col}" stroke-width="2" stroke-linecap="round" ${dash} ${me} ${ms}/>`;
     }).join('');
 
-    // ── Node foreignObjects ───────────────────────────────────────
+    // Nodes — pure SVG shapes, NO foreignObject (foreignObject taints canvas)
+    const NODE_R = 11;   // border-radius
+    const HEADER_H = 28; // node header height
+    const AV_R = 18;     // avatar radius
     const nodeSVG = Object.values(nodeData).map(n=>{
       const nx=n.x-minX, ny=n.y-minY, nw=n._w, nh=n._h;
       const ph=!!n.placeholder;
-      const bc=ph?'rgba(124,58,237,0.4)':'#e2e5eb';
-      const bs=ph?'dashed':'solid';
-      const bg=ph?'rgba(124,58,237,0.06)':'#ffffff';
-      const avBg=ph?'linear-gradient(135deg,#ede9fe,#ddd6fe)':'linear-gradient(135deg,#dbeafe,#bfdbfe)';
-      const avC=ph?'#7c3aed':'#1c64f2';
-      return `<foreignObject x="${nx}" y="${ny}" width="${nw}" height="${nh}">
-<div xmlns="http://www.w3.org/1999/xhtml" style="width:${nw}px;height:${nh}px;box-sizing:border-box;background:${bg};border:1.5px ${bs} ${bc};border-radius:11px;font-family:'DM Sans',system-ui,sans-serif;box-shadow:0 1px 3px rgba(0,0,0,.07),0 4px 16px rgba(0,0,0,.05);overflow:hidden;display:flex;flex-direction:column;">
-  <div style="display:flex;align-items:center;gap:6px;padding:7px 10px 6px;border-bottom:1px solid #e2e5eb;background:#f6f7f9;flex-shrink:0;">
-    <span style="flex:1;font-size:9px;font-weight:600;text-transform:uppercase;letter-spacing:.07em;color:#94a3b8;white-space:nowrap;overflow:hidden;text-overflow:ellipsis;">${esc(n.dept||'—')}</span>
-  </div>
-  <div style="padding:10px 12px 11px;display:flex;align-items:center;gap:10px;flex:1;">
-    <div style="width:36px;height:36px;border-radius:50%;background:${avBg};border:1.5px ${ph?'dashed':'solid'} ${ph?'rgba(124,58,237,.4)':'rgba(28,100,242,.18)'};display:flex;align-items:center;justify-content:center;font-size:${ph?15:12}px;font-weight:700;color:${avC};flex-shrink:0;">${ph?'?':esc(ini(n.name))}</div>
-    <div style="flex:1;min-width:0;">
-      <div style="font-size:12px;font-weight:600;color:#0f172a;line-height:1.3;margin-bottom:2px;overflow:hidden;text-overflow:ellipsis;white-space:nowrap;">${esc(n.name)}</div>
-      <div style="font-size:11px;color:#475569;line-height:1.3;overflow:hidden;text-overflow:ellipsis;white-space:nowrap;">${esc(n.title||'')}</div>
-    </div>
-  </div>
-</div>
-</foreignObject>`;
+      const borderCol = ph ? '#9b6fe0' : '#d0d5e0';
+      const bgCol     = ph ? '#f5f0fe' : '#ffffff';
+      const headerBg  = ph ? '#ede8fd' : '#f6f7f9';
+      const avFill1   = ph ? '#ede9fe' : '#dbeafe';
+      const avFill2   = ph ? '#ddd6fe' : '#bfdbfe';
+      const avText    = ph ? '#7c3aed' : '#1c64f2';
+      const av = ph ? '?' : xe(ini(n.name));
+      // Truncate text to fit
+      const maxNameChars = Math.floor((nw - 60) / 7);
+      const name  = xe(n.name  || '').slice(0, maxNameChars + 2);
+      const title = xe(n.title || '').slice(0, maxNameChars + 2);
+      const dept  = xe(n.dept  || '—').slice(0, maxNameChars + 4);
+      return `<g>
+  <!-- Card background + border -->
+  <rect x="${nx}" y="${ny}" width="${nw}" height="${nh}" rx="${NODE_R}" fill="${bgCol}" stroke="${borderCol}" stroke-width="1.5" ${ph?'stroke-dasharray="5 3"':''}/>
+  <!-- Header background -->
+  <clipPath id="ch${n.id}"><rect x="${nx}" y="${ny}" width="${nw}" height="${HEADER_H}" rx="${NODE_R}"/></clipPath>
+  <rect x="${nx}" y="${ny}" width="${nw}" height="${HEADER_H}" fill="${headerBg}" clip-path="url(#ch${n.id})"/>
+  <!-- Header bottom border -->
+  <line x1="${nx}" y1="${ny+HEADER_H}" x2="${nx+nw}" y2="${ny+HEADER_H}" stroke="${borderCol}" stroke-width="1"/>
+  <!-- Dept tag -->
+  <text x="${nx+10}" y="${ny+18}" font-family="monospace" font-size="8.5" font-weight="600" fill="#94a3b8" letter-spacing="0.5">${dept}</text>
+  <!-- Avatar circle -->
+  <defs><linearGradient id="av${n.id}" x1="0" y1="0" x2="1" y2="1"><stop offset="0%" stop-color="${avFill1}"/><stop offset="100%" stop-color="${avFill2}"/></linearGradient></defs>
+  <circle cx="${nx+22}" cy="${ny+HEADER_H+22}" r="${AV_R}" fill="url(#av${n.id})" stroke="${ph?'#9b6fe0':'rgba(28,100,242,0.2)'}" stroke-width="1.5" ${ph?'stroke-dasharray="3 2"':''}/>
+  <!-- Avatar initials -->
+  <text x="${nx+22}" y="${ny+HEADER_H+27}" text-anchor="middle" font-family="sans-serif" font-size="${ph?14:11}" font-weight="700" fill="${avText}">${av}</text>
+  <!-- Name -->
+  <text x="${nx+50}" y="${ny+HEADER_H+19}" font-family="sans-serif" font-size="11.5" font-weight="600" fill="#0f172a">${name}</text>
+  <!-- Title -->
+  <text x="${nx+50}" y="${ny+HEADER_H+34}" font-family="sans-serif" font-size="10.5" fill="#475569">${title}</text>
+</g>`;
     }).join('');
 
-    // ── Title header height ───────────────────────────────────────
-    const titleH = 56;
+    // Title header
+    const titleH = 58;
     const totalH = titleH + H;
 
-    // ── Build full SVG ────────────────────────────────────────────
     const svgStr = `<svg xmlns="http://www.w3.org/2000/svg" width="${W}" height="${totalH}">
   <defs>${defs}</defs>
-  <!-- White background -->
   <rect width="${W}" height="${totalH}" fill="#ffffff"/>
-  <!-- Title bar -->
-  <rect width="${W}" height="${titleH}" fill="#ffffff"/>
   <line x1="0" y1="${titleH}" x2="${W}" y2="${titleH}" stroke="#e2e5eb" stroke-width="1"/>
-  <!-- OrgChart icon -->
-  <g transform="translate(20,18)" stroke="#1c64f2" stroke-width="2" fill="none" stroke-linecap="round" stroke-linejoin="round">
+  <!-- Icon -->
+  <g transform="translate(20,19)" stroke="#1c64f2" stroke-width="2" fill="none" stroke-linecap="round" stroke-linejoin="round">
     <rect x="5" y="0" width="6" height="4" rx="0.5"/><rect x="0" y="11" width="5" height="4" rx="0.5"/>
     <rect x="11" y="11" width="5" height="4" rx="0.5"/>
     <line x1="8" y1="4" x2="8" y2="8"/><line x1="8" y1="8" x2="2.5" y2="11"/><line x1="8" y1="8" x2="13.5" y2="11"/>
   </g>
-  <!-- Organisation name -->
-  <text x="48" y="24" font-family="DM Sans,system-ui,sans-serif" font-size="15" font-weight="600" fill="#0f172a">${esc(currentOrgName)}</text>
-  <text x="48" y="42" font-family="DM Sans,system-ui,sans-serif" font-size="11" fill="#94a3b8">${esc(chartName)}</text>
-  <!-- Chart area background -->
+  <text x="50" y="26" font-family="sans-serif" font-size="15" font-weight="700" fill="#0f172a">${xe(currentOrgName)}</text>
+  <text x="50" y="44" font-family="sans-serif" font-size="11" fill="#94a3b8">${xe(chartName)}</text>
+  <!-- Chart background -->
   <rect y="${titleH}" width="${W}" height="${H}" fill="#eef0f4"/>
-  <!-- Chart content shifted down by titleH -->
   <g transform="translate(0,${titleH})">
     ${frameSVG}
     ${edgeSVG}
@@ -3284,34 +3308,32 @@ async function _exportPDF() {
   </g>
 </svg>`;
 
-    // ── Render SVG → canvas via Image ─────────────────────────────
+    // Render SVG → canvas (safe: no foreignObject = no taint)
     const scale = 2;
-    const canvas = document.createElement('canvas');
-    canvas.width  = W * scale;
-    canvas.height = totalH * scale;
-    const ctx2 = canvas.getContext('2d');
+    const cvs = document.createElement('canvas');
+    cvs.width = W * scale; cvs.height = totalH * scale;
+    const ctx2 = cvs.getContext('2d');
     ctx2.scale(scale, scale);
 
     await new Promise((resolve, reject) => {
-      const blob = new Blob([svgStr], {type:'image/svg+xml;charset=utf-8'});
-      const url  = URL.createObjectURL(blob);
-      const img  = new Image();
-      img.onload = () => { ctx2.drawImage(img, 0, 0); URL.revokeObjectURL(url); resolve(); };
-      img.onerror = reject;
-      img.src = url;
+      const blob2 = new Blob([svgStr], {type:'image/svg+xml;charset=utf-8'});
+      const url2  = URL.createObjectURL(blob2);
+      const img   = new Image();
+      img.onload  = () => { ctx2.drawImage(img,0,0); URL.revokeObjectURL(url2); resolve(); };
+      img.onerror = (err) => { URL.revokeObjectURL(url2); reject(err); };
+      img.src = url2;
     });
 
-    // ── Save as PDF ───────────────────────────────────────────────
     const { jsPDF } = window.jspdf;
-    const imgData = canvas.toDataURL('image/png');
+    const imgData = cvs.toDataURL('image/png');
     const landscape = W > totalH;
-    const pdf = new jsPDF({ orientation: landscape ? 'l' : 'p', unit: 'px', format: [W, totalH] });
+    const pdf = new jsPDF({ orientation: landscape?'l':'p', unit:'px', format:[W, totalH] });
     pdf.addImage(imgData, 'PNG', 0, 0, W, totalH);
     pdf.save(`${chartName}.pdf`);
     setStatus('PDF downloaded');
   } catch(e) {
     console.error('PDF export error:', e);
-    setStatus('PDF export failed', true);
+    setStatus('PDF export failed — ' + (e && e.message ? e.message : String(e)), true);
   }
 }
 
@@ -3331,7 +3353,9 @@ function _openInNewWindow() {
   const payload = {
     nodes: nodeSnapshot, edges, frames,
     nidC, eidC, fidC,
-    orgId, orgName, companyId, chartName
+    orgId, orgName, companyId, chartName,
+    allOrgs,                                  // pre-load the org list
+    __base__: location.origin + (location.pathname.includes('/') ? location.pathname.replace(/\/[^\/]*$/, '') : '')
   };
 
   // Fetch this page's own HTML source, inject the payload, open in new tab.
